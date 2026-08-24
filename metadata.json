@@ -1,0 +1,6 @@
+{
+  "name": "Validación de tareas de ejecución",
+  "description": "Sistema de validación de tareas de ejecución comercial para Oeste Centro de Distribución (OCD). Permite a vendedores auditar y apelar tareas invalidadas con evidencia fotográfica, a supervisores dictaminar resoluciones, y conservar el historial acumulativo de importaciones Excel.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
