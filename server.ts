@@ -39,12 +39,45 @@ app.get('/api/image-proxy', async (req, res) => {
 
   let finalUrl = targetUrl.trim();
 
-  // If wrapped in quotes or formulas
-  finalUrl = finalUrl.replace(/^["']+|["']+$/g, '');
+  // If wrapped in quotes, formulas or Excel artifacts
+  finalUrl = finalUrl.replace(/^["']+|["']+$/g, '').trim();
+
+  // Extract from formula if present: =HYPERLINK("url", "text")
+  const formulaMatch = finalUrl.match(/HYPERLINK\(\s*["']([^"']+)["']/i);
+  if (formulaMatch && formulaMatch[1]) {
+    finalUrl = formulaMatch[1].trim();
+  }
 
   if (!finalUrl.startsWith('http://') && !finalUrl.startsWith('https://')) {
     finalUrl = 'https://' + finalUrl;
   }
+
+  // Helper to generate a clean, branded SVG fallback
+  const sendSvgFallback = (title: string, subtitle: string) => {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600" fill="none">
+      <rect width="800" height="600" fill="#071D38"/>
+      <rect x="20" y="20" width="760" height="560" rx="16" stroke="#2B98BA" stroke-opacity="0.3" stroke-width="2" stroke-dasharray="6 6"/>
+      <circle cx="400" cy="230" r="50" fill="#0B2F5B" stroke="#2B98BA" stroke-width="2"/>
+      <path d="M380 220L395 240L415 210L430 240H370L380 220Z" fill="#4AC3E7"/>
+      <circle cx="420" cy="205" r="5" fill="#4AC3E7"/>
+      <text x="400" y="325" fill="#FFFFFF" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="18" font-weight="bold" text-anchor="middle">
+        ${title}
+      </text>
+      <text x="400" y="360" fill="#94A3B8" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="13" text-anchor="middle">
+        ${subtitle}
+      </text>
+      <rect x="280" y="405" width="240" height="36" rx="8" fill="#0B2F5B" stroke="#2B98BA" stroke-width="1.5"/>
+      <text x="400" y="428" fill="#4AC3E7" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="bold" text-anchor="middle">
+        Auditoría Comercial OCD
+      </text>
+    </svg>`;
+
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Content-Type', 'image/svg+xml');
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    return res.status(200).send(svg);
+  };
 
   // Handle Google Drive links
   const driveId = extractGoogleDriveId(finalUrl);
@@ -76,7 +109,7 @@ app.get('/api/image-proxy', async (req, res) => {
   for (const url of candidateUrls) {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 9000);
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
 
       const response = await fetch(url, {
         headers: {
@@ -96,13 +129,13 @@ app.get('/api/image-proxy', async (req, res) => {
 
       const rawContentType = response.headers.get('content-type') || '';
       
-      // If response is an HTML page (like Google Drive login/interstitial) and we have other candidates, skip
-      if (rawContentType.includes('text/html') && candidateUrls.indexOf(url) < candidateUrls.length - 1) {
+      // If response is an HTML page (like Google Drive login/interstitial) skip to next
+      if (rawContentType.includes('text/html')) {
         continue;
       }
 
       const arrayBuffer = await response.arrayBuffer();
-      if (arrayBuffer.byteLength < 50 && candidateUrls.indexOf(url) < candidateUrls.length - 1) {
+      if (arrayBuffer.byteLength < 50) {
         continue; // suspiciously small/empty response, try next candidate
       }
 
@@ -125,9 +158,18 @@ app.get('/api/image-proxy', async (req, res) => {
     }
   }
 
-  // If internal fetch failed on all candidates, redirect client directly as fallback
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  return res.redirect(302, candidateUrls[0] || finalUrl);
+  // If internal fetch failed on all candidates, return styled fallback SVG
+  if (driveId) {
+    return sendSvgFallback(
+      'Archivo de Google Drive',
+      'Requiere permisos de visualización o acceso público'
+    );
+  }
+
+  return sendSvgFallback(
+    'Evidencia Fotográfica No Disponible',
+    'No se pudo recuperar la imagen del servidor externo'
+  );
 });
 
 // Health check endpoint

@@ -1,0 +1,42 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --ocd-cyan: #2B98BA;
+    --ocd-cyan-hover: #2183A0;
+    --ocd-cyan-dark: #17657D;
+    --ocd-cyan-light: #EBF7FA;
+    --ocd-cyan-subtle: #F2FAFC;
+    --ocd-navy: #0B2F5B;
+    --ocd-navy-dark: #071D38;
+    --ocd-navy-light: #16467D;
+    --ocd-charcoal: #181B1E;
+    --ocd-border: #D5E5ED;
+  }
+
+  body {
+    background-color: #F3F8FB;
+    color: #181B1E;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+/* Custom scrollbars with OCD tint */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #EBF3F7;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #B7D2DE;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #2B98BA;
+}
