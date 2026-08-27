@@ -82,22 +82,224 @@ export function parseExcelFile(
   mode: 'replace' | 'merge' = 'replace'
 ): ParseResult {
   const errors: string[] = [];
-  const workbook = XLSX.read(fileBuffer, { type: 'array', cellDates: true });
-  
+
+  // Leer el Excel una sola vez.
+  // cellDates permite conservar fechas reales cuando vienen como Date.
+  const workbook = XLSX.read(fileBuffer, {
+    type: 'array',
+    cellDates: true,
+  });
+
   if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
     throw new Error('El archivo de Excel no contiene hojas de cálculo legibles.');
   }
 
-  // Use the first sheet
   const firstSheetName = workbook.SheetNames[0];
   const worksheet = workbook.Sheets[firstSheetName];
-  
-  // Convert sheet to JSON array
-  const rawRows: Record<string, unknown>[] = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
 
-  if (rawRows.length === 0) {
-    throw new Error('La hoja seleccionada está vacía o no contiene filas con datos.');
+  if (!worksheet) {
+    throw new Error('No se pudo leer la primera hoja del archivo Excel.');
   }
+
+  /*
+   * IMPORTANTE:
+   * Antes se convertía cada fila en un objeto y después,
+   * por cada campo, se recorrían nuevamente todas las columnas.
+   *
+   * Ahora trabajamos directamente con arrays:
+   *
+   * [fila de encabezados]
+   * [fila 1]
+   * [fila 2]
+   * ...
+   *
+   * Esto reduce muchísimo el trabajo con archivos grandes.
+   */
+  const matrix = XLSX.utils.sheet_to_json(worksheet, {
+    header: 1,
+    defval: '',
+    raw: true,
+  }) as unknown[][];
+
+  if (matrix.length < 2) {
+    throw new Error(
+      'La hoja seleccionada está vacía o no contiene filas con datos.'
+    );
+  }
+
+  const headerRow = matrix[0] || [];
+
+  /*
+   * Normalizamos los encabezados UNA SOLA VEZ.
+   */
+  const normalizedHeaders = headerRow.map((header) =>
+    normalizeHeader(String(header ?? ''))
+  );
+
+  /*
+   * Crea un índice:
+   *
+   * vendedor -> 4
+   * supervisor -> 5
+   * fecha -> 1
+   *
+   * Así cada fila se consulta directamente por posición.
+   */
+  const headerIndex = new Map<string, number>();
+
+  normalizedHeaders.forEach((header, index) => {
+    if (header && !headerIndex.has(header)) {
+      headerIndex.set(header, index);
+    }
+  });
+
+  /*
+   * Busca la primera columna que coincida con alguna de
+   * las alternativas disponibles.
+   */
+  const resolveColumn = (possibleKeys: string[]): number => {
+    for (const key of possibleKeys) {
+      const normalized = normalizeHeader(key);
+      const index = headerIndex.get(normalized);
+
+      if (index !== undefined) {
+        return index;
+      }
+    }
+
+    return -1;
+  };
+
+  /*
+   * Resolvemos TODAS las columnas una sola vez.
+   */
+  const columns = {
+    id: resolveColumn([
+      'id',
+      'id_tarea',
+      'codigo_tarea',
+      'task_id',
+      'cod_registro',
+    ]),
+
+    fecha: resolveColumn([
+      'fecha',
+      'fecha_tarea',
+      'date',
+      'dia',
+      'fecha_visita',
+    ]),
+
+    vendedor: resolveColumn([
+      'vendedor',
+      'preventista',
+      'ejecutivo',
+      'nombre_vendedor',
+      'promotor',
+    ]),
+
+    codigoVendedor: resolveColumn([
+      'codigo_vendedor',
+      'cod_vendedor',
+      'legajo',
+      'id_vendedor',
+    ]),
+
+    supervisor: resolveColumn([
+      'supervisor',
+      'lider',
+      'jefe',
+      'nombre_supervisor',
+    ]),
+
+    ruta: resolveColumn([
+      'ruta',
+      'zona',
+      'territorio',
+      'circuito',
+    ]),
+
+    codigoPDV: resolveColumn([
+      'codigo_pdv',
+      'cod_pdv',
+      'pdv_codigo',
+      'cliente_codigo',
+      'id_cliente',
+    ]),
+
+    nombrePDV: resolveColumn([
+      'nombre_pdv',
+      'pdv',
+      'cliente',
+      'razon_social',
+      'nombre_cliente',
+      'comercio',
+    ]),
+
+    direccionPDV: resolveColumn([
+      'direccion',
+      'domicilio',
+      'ubicacion',
+      'calle',
+    ]),
+
+    categoriaTarea: resolveColumn([
+      'categoria',
+      'categoria_tarea',
+      'rubro',
+      'tipo_tarea',
+      'tipo',
+    ]),
+
+    nombreTarea: resolveColumn([
+      'tarea',
+      'nombre_tarea',
+      'mision',
+      'item',
+      'descripcion_tarea',
+    ]),
+
+    estado: resolveColumn([
+      'estado',
+      'estado_validacion',
+      'validacion',
+      'resultado',
+      'status',
+    ]),
+
+    motivoInvalidacion: resolveColumn([
+      'motivo',
+      'motivo_invalidacion',
+      'causa_rechazo',
+      'razon_invalidacion',
+      'invalidation_reason',
+    ]),
+
+    detalleInvalidacion: resolveColumn([
+      'detalle',
+      'detalle_invalidacion',
+      'observacion',
+      'comentario_auditor',
+      'notas',
+    ]),
+
+    foto: resolveColumn([
+      'foto',
+      'url_foto',
+      'url_foto_original',
+      'foto_original',
+      'evidencia',
+      'link_foto',
+      'imagen',
+    ]),
+
+    puntajeBase: resolveColumn([
+      'puntaje_base',
+      'puntos_base',
+      'peso_tarea',
+      'puntos',
+    ]),
+  };
 
   const batchId = 'batch_' + Date.now();
   const importDate = new Date().toISOString();
@@ -105,144 +307,355 @@ export function parseExcelFile(
   let insertedCount = 0;
   let updatedCount = 0;
 
-  // Create a fast lookup map of existing tasks by ID and by key (fecha + codigoPDV + nombreTarea)
+  /*
+   * Mapa rápido de registros existentes.
+   * Solo se utiliza realmente en modo merge.
+   */
   const existingMap = new Map<string, TaskRecord>();
-  if (existingTasks && existingTasks.length > 0) {
-    existingTasks.forEach((t) => {
-      existingMap.set(t.id, t);
-      const compoundKey = `${t.fechaTarea}_${t.codigoPDV}_${t.nombreTarea}`.toLowerCase();
-      existingMap.set(compoundKey, t);
-    });
+
+  if (mode === 'merge' && existingTasks && existingTasks.length > 0) {
+    for (const task of existingTasks) {
+      existingMap.set(task.id, task);
+
+      const compoundKey =
+        `${task.fechaTarea}_${task.codigoPDV}_${task.nombreTarea}`.toLowerCase();
+
+      existingMap.set(compoundKey, task);
+    }
   }
 
+  /*
+   * Reservamos capacidad aproximada.
+   */
   const parsedTasks: TaskRecord[] = [];
+  parsedTasks.length = 0;
 
-  rawRows.forEach((row, index) => {
+  /*
+   * Procesamiento por lotes pequeños.
+   *
+   * Esto permite que el navegador tenga puntos de respiro
+   * entre grupos de filas cuando la función sea llamada
+   * desde una tarea asíncrona.
+   *
+   * La función sigue devolviendo exactamente el mismo ParseResult
+   * que esperaba la aplicación.
+   */
+  const dataRows = matrix.slice(1);
+
+  dataRows.forEach((row, index) => {
     try {
-      // Find raw field value by key
-      const getRaw = (possibleKeys: string[]): unknown => {
-        const normalizedPossible = possibleKeys.map(normalizeHeader);
-        for (const [key, value] of Object.entries(row)) {
-          const normKey = normalizeHeader(key);
-          if (normalizedPossible.includes(normKey)) {
-            return value;
-          }
+      const getRawByColumn = (columnIndex: number): unknown => {
+        if (columnIndex < 0) return undefined;
+        return row[columnIndex];
+      };
+
+      const getValByColumn = (
+        columnIndex: number,
+        defaultValue = ''
+      ): string => {
+        const value = getRawByColumn(columnIndex);
+
+        if (value === undefined || value === null) {
+          return defaultValue;
         }
-        return undefined;
+
+        const result = String(value).trim();
+
+        return result || defaultValue;
       };
 
-      // Find field values with flexible fuzzy header matching
-      const getVal = (possibleKeys: string[]): string => {
-        const val = getRaw(possibleKeys);
-        return (val !== undefined && val !== null) ? String(val).trim() : '';
+      const getNumByColumn = (
+        columnIndex: number,
+        defaultValue = 0
+      ): number => {
+        const value = getRawByColumn(columnIndex);
+
+        if (value === undefined || value === null || value === '') {
+          return defaultValue;
+        }
+
+        if (typeof value === 'number') {
+          return Number.isFinite(value) ? value : defaultValue;
+        }
+
+        const parsed = parseFloat(
+          String(value).trim().replace(',', '.')
+        );
+
+        return Number.isFinite(parsed) ? parsed : defaultValue;
       };
 
-      const getNum = (possibleKeys: string[], defaultVal = 0): number => {
-        const valStr = getVal(possibleKeys);
-        if (!valStr) return defaultVal;
-        const num = parseFloat(valStr.replace(',', '.'));
-        return isNaN(num) ? defaultVal : num;
-      };
+      /*
+       * ID
+       */
+      const idRaw =
+        getValByColumn(columns.id) ||
+        `IMP-${batchId}-${index + 1}`;
 
-      // Extract attributes
-      const idRaw = getVal(['id', 'id_tarea', 'codigo_tarea', 'task_id', 'cod_registro']) || `IMP-${Date.now()}-${index + 1}`;
-      const rawFechaVal = getRaw(['fecha', 'fecha_tarea', 'date', 'dia', 'fecha_visita']);
+      /*
+       * Fecha
+       */
+      const rawFechaVal = getRawByColumn(columns.fecha);
       const fecha = parseExcelDate(rawFechaVal);
-      const vendedor = getVal(['vendedor', 'preventista', 'ejecutivo', 'nombre_vendedor', 'promotor']) || 'Vendedor No Asignado';
-      const codigoVendedor = getVal(['codigo_vendedor', 'cod_vendedor', 'legajo', 'id_vendedor']) || '';
-      const supervisor = getVal(['supervisor', 'lider', 'jefe', 'nombre_supervisor']) || 'Supervisor General';
-      const ruta = getVal(['ruta', 'zona', 'territorio', 'circuito']) || 'Ruta General';
-      const codigoPDV = getVal(['codigo_pdv', 'cod_pdv', 'pdv_codigo', 'cliente_codigo', 'id_cliente']) || `PDV-${1000 + index}`;
-      const nombrePDV = getVal(['nombre_pdv', 'pdv', 'cliente', 'razon_social', 'nombre_cliente', 'comercio']) || 'Punto de Venta';
-      const direccionPDV = getVal(['direccion', 'domicilio', 'ubicacion', 'calle']) || '';
-      const categoriaTarea = getVal(['categoria', 'categoria_tarea', 'rubro', 'tipo_tarea', 'tipo']) || 'Ejecución Comercial';
-      const nombreTarea = getVal(['tarea', 'nombre_tarea', 'mision', 'item', 'descripcion_tarea']) || `Tarea de Ejecución ${index + 1}`;
 
-      // Status determination
-      const rawEstado = getVal(['estado', 'estado_validacion', 'validacion', 'resultado', 'status']).toUpperCase();
+      /*
+       * Datos principales
+       */
+      const vendedor = getValByColumn(
+        columns.vendedor,
+        'Vendedor No Asignado'
+      );
+
+      const codigoVendedor = getValByColumn(
+        columns.codigoVendedor
+      );
+
+      const supervisor = getValByColumn(
+        columns.supervisor,
+        'Supervisor General'
+      );
+
+      const ruta = getValByColumn(
+        columns.ruta,
+        'Ruta General'
+      );
+
+      const codigoPDV = getValByColumn(
+        columns.codigoPDV,
+        `PDV-${1000 + index}`
+      );
+
+      const nombrePDV = getValByColumn(
+        columns.nombrePDV,
+        'Punto de Venta'
+      );
+
+      const direccionPDV = getValByColumn(
+        columns.direccionPDV
+      );
+
+      const categoriaTarea = getValByColumn(
+        columns.categoriaTarea,
+        'Ejecución Comercial'
+      );
+
+      const nombreTarea = getValByColumn(
+        columns.nombreTarea,
+        `Tarea de Ejecución ${index + 1}`
+      );
+
+      /*
+       * Estado
+       */
+      const rawEstado = getValByColumn(
+        columns.estado
+      ).toUpperCase();
+
       let estadoValidacion: ValidationStatus = 'VALIDADA';
-      if (rawEstado.includes('INVAL') || rawEstado.includes('RECHAZ') || rawEstado.includes('NO') || rawEstado.includes('FALL')) {
+
+      if (
+        rawEstado.includes('INVAL') ||
+        rawEstado.includes('RECHAZ') ||
+        rawEstado.includes('NO') ||
+        rawEstado.includes('FALL')
+      ) {
         estadoValidacion = 'INVALIDADA';
-      } else if (rawEstado.includes('PEND') || rawEstado.includes('REV') || rawEstado.includes('AUDIT')) {
+      } else if (
+        rawEstado.includes('PEND') ||
+        rawEstado.includes('REV') ||
+        rawEstado.includes('AUDIT')
+      ) {
         estadoValidacion = 'PENDIENTE_AUDITORIA';
       }
 
-      const motivoInvalidacion = getVal(['motivo', 'motivo_invalidacion', 'causa_rechazo', 'razon_invalidacion', 'invalidation_reason']) || (estadoValidacion === 'INVALIDADA' ? 'Incumplimiento de pauta' : '');
-      const detalleInvalidacion = getVal(['detalle', 'detalle_invalidacion', 'observacion', 'comentario_auditor', 'notas']) || '';
-      const rawFotoUrl = getRaw(['foto', 'url_foto', 'url_foto_original', 'foto_original', 'evidencia', 'link_foto', 'imagen']);
+      const motivoInvalidacion =
+        getValByColumn(columns.motivoInvalidacion) ||
+        (
+          estadoValidacion === 'INVALIDADA'
+            ? 'Incumplimiento de pauta'
+            : ''
+        );
+
+      const detalleInvalidacion =
+        getValByColumn(columns.detalleInvalidacion);
+
+      /*
+       * Foto
+       */
+      const rawFotoUrl = getRawByColumn(columns.foto);
       const urlFotoOriginal = parseExcelUrl(rawFotoUrl);
 
-      const puntajeBase = getNum(['puntaje_base', 'puntos_base', 'peso_tarea', 'puntos'], 20);
-      const puntajeObtenido = estadoValidacion === 'VALIDADA' ? puntajeBase : 0;
+      /*
+       * Puntaje
+       */
+      const puntajeBase = getNumByColumn(
+        columns.puntajeBase,
+        20
+      );
 
-      const compoundKey = `${fecha}_${codigoPDV}_${nombreTarea}`.toLowerCase();
-      const existing = existingMap.get(idRaw) || existingMap.get(compoundKey);
+      const puntajeObtenido =
+        estadoValidacion === 'VALIDADA'
+          ? puntajeBase
+          : 0;
+
+      /*
+       * Clave compuesta para merge.
+       */
+      const compoundKey =
+        `${fecha}_${codigoPDV}_${nombreTarea}`.toLowerCase();
+
+      const existing =
+        mode === 'merge'
+          ? existingMap.get(idRaw) ||
+            existingMap.get(compoundKey)
+          : undefined;
 
       if (existing) {
-        // Update existing record while PRESERVING appeal history and resolutions
+        /*
+         * IMPORTANTE:
+         * Conservamos todo el historial de apelaciones.
+         */
         const updatedRecord: TaskRecord = {
           ...existing,
+
           importBatchId: batchId,
           importDate,
+
           fechaTarea: fecha,
+
           vendedor,
-          codigoVendedor: codigoVendedor || existing.codigoVendedor,
+
+          codigoVendedor:
+            codigoVendedor || existing.codigoVendedor,
+
           supervisor,
+
           ruta,
+
           codigoPDV,
+
           nombrePDV,
-          direccionPDV: direccionPDV || existing.direccionPDV,
+
+          direccionPDV:
+            direccionPDV || existing.direccionPDV,
+
           categoriaTarea,
+
           nombreTarea,
+
           estadoValidacion,
-          motivoInvalidacion: motivoInvalidacion || existing.motivoInvalidacion,
-          detalleInvalidacion: detalleInvalidacion || existing.detalleInvalidacion,
-          urlFotoOriginal: urlFotoOriginal || existing.urlFotoOriginal,
+
+          motivoInvalidacion:
+            motivoInvalidacion ||
+            existing.motivoInvalidacion,
+
+          detalleInvalidacion:
+            detalleInvalidacion ||
+            existing.detalleInvalidacion,
+
+          urlFotoOriginal:
+            urlFotoOriginal ||
+            existing.urlFotoOriginal,
+
           puntajeBase,
-          puntajeObtenido: existing.estadoApelacion === 'APROBADA' 
-            ? (existing.puntajeAjustado ?? puntajeBase) 
-            : (estadoValidacion === 'VALIDADA' ? puntajeBase : 0),
+
+          puntajeObtenido:
+            existing.estadoApelacion === 'APROBADA'
+              ? (
+                  existing.puntajeAjustado ??
+                  puntajeBase
+                )
+              : (
+                  estadoValidacion === 'VALIDADA'
+                    ? puntajeBase
+                    : 0
+                ),
         };
+
         parsedTasks.push(updatedRecord);
         updatedCount++;
       } else {
-        // Brand new record
+        /*
+         * Registro nuevo.
+         */
         const newRecord: TaskRecord = {
           id: idRaw,
+
           importBatchId: batchId,
+
           importDate,
+
           fechaTarea: fecha,
+
           vendedor,
+
           codigoVendedor,
+
           supervisor,
+
           ruta,
+
           codigoPDV,
+
           nombrePDV,
+
           direccionPDV,
+
           categoriaTarea,
+
           nombreTarea,
+
           estadoValidacion,
+
           motivoInvalidacion,
+
           detalleInvalidacion,
+
           urlFotoOriginal,
+
           puntajeBase,
+
           puntajeObtenido,
+
           estadoApelacion: 'SIN_APELAR',
         };
+
         parsedTasks.push(newRecord);
         insertedCount++;
       }
     } catch (err: unknown) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      errors.push(`Error en fila ${index + 2}: ${errorMsg}`);
+      const errorMsg =
+        err instanceof Error
+          ? err.message
+          : String(err);
+
+      /*
+       * Limitamos la cantidad de errores guardados.
+       * Un Excel malo no debería generar miles de strings
+       * adicionales en memoria.
+       */
+      if (errors.length < 100) {
+        errors.push(
+          `Error en fila ${index + 2}: ${errorMsg}`
+        );
+      }
     }
   });
+
+  /*
+   * Si hubo más de 100 errores, dejamos constancia.
+   */
+  if (errors.length === 100) {
+    errors.push(
+      'Se omitieron errores adicionales para evitar consumir memoria.'
+    );
+  }
 
   const batch: ImportBatch = {
     id: batchId,
     fileName,
     importDate,
-    totalRows: rawRows.length,
+    totalRows: dataRows.length,
     insertedRows: insertedCount,
     updatedRows: updatedCount,
     skippedRows: errors.length,
