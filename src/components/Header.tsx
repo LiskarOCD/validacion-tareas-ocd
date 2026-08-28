@@ -18,8 +18,8 @@ import { UserRole } from '../types';
 import { OcdLogo } from './OcdLogo';
 
 interface HeaderProps {
-  userRole: UserRole;
-  onRoleChange: (role: UserRole) => void;
+  user: User;
+  onChange: (: User) => void;
   vendedoresList: string[];
   onOpenImport: () => void;
   onOpenExport: () => void;
@@ -135,64 +135,44 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
             </div>
 
-            {/* Role Switcher */}
-            <div className="bg-[#06182E]/80 px-2.5 py-1 rounded-lg border border-[#2B98BA]/30 flex items-center gap-2">
-              <div className="flex items-center gap-1 text-slate-300 text-xs">
-                {userRole.role === 'SUPERVISOR' ? (
-                  <ShieldCheck className="w-4 h-4 text-[#4AC3E7]" />
-                ) : (
-                  <User className="w-4 h-4 text-[#2B98BA]" />
-                )}
-                <span className="hidden sm:inline text-[11px] font-medium">Perfil:</span>
-              </div>
-              
-              <select
-                value={userRole.role === 'SUPERVISOR' ? 'SUPERVISOR' : userRole.selectedVendedor || ''}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  if (val === 'SUPERVISOR') {
-                    onRoleChange({
-                      role: 'SUPERVISOR',
-                      name: 'Supervisor General OCD',
-                    });
-                  } else {
-                    onRoleChange({
-                      role: 'VENDEDOR',
-                      selectedVendedor: val,
-                      name: val,
-                    });
-                  }
-                }}
-                className="bg-[#09223F] text-xs text-slate-100 border border-[#2B98BA]/40 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-[#2B98BA] font-medium cursor-pointer"
-              >
-                <option value="SUPERVISOR">👑 Supervisor / Auditor General</option>
-                {vendedoresList.length > 0 ? (
-                  <optgroup label="Ver como Preventista / Vendedor">
-                    {vendedoresList.map((vend) => (
-                      <option key={vend} value={vend}>
-                        👤 Vendedor: {vend}
-                      </option>
-                    ))}
-                  </optgroup>
-                ) : (
-                  <option disabled value="">
-                    (Sin preventistas cargados)
-                  </option>
-                )}
-              </select>
-            </div>
+           {/* Current authenticated profile */}
+<div className="bg-[#06182E]/80 px-2.5 py-1 rounded-lg border border-[#2B98BA]/30 flex items-center gap-2">
+  <div className="flex items-center gap-1.5 text-slate-300 text-xs">
+    {userRole.role === 'ADMIN' ? (
+      <ShieldCheck className="w-4 h-4 text-amber-300" />
+    ) : userRole.role === 'SUPERVISOR' ? (
+      <ShieldCheck className="w-4 h-4 text-[#4AC3E7]" />
+    ) : (
+      <User className="w-4 h-4 text-[#2B98BA]" />
+    )}
+
+    <span className="hidden sm:inline text-[11px] font-medium">
+      Perfil:
+    </span>
+
+    <span className="text-xs font-bold text-white">
+      {userRole.role === 'ADMIN'
+        ? `👑 ${userRole.name}`
+        : userRole.role === 'SUPERVISOR'
+          ? `🛡️ ${userRole.name}`
+          : `👤 ${userRole.name}`}
+    </span>
+  </div>
+</div>
 
             {/* Import & Export Buttons */}
             <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={onOpenImport}
-                className="bg-[#2B98BA] hover:bg-[#2183A0] text-white text-xs font-black px-3.5 py-1.5 rounded-lg flex items-center gap-1.5 transition-all shadow-xs active:scale-95 cursor-pointer"
-                title="Importar Excel con nuevas tareas o actualizaciones"
-              >
-                <Upload className="w-3.5 h-3.5" />
-                <span>Cargar Excel</span>
-              </button>
+             {userRole.role === 'ADMIN' && (
+  <button
+    type="button"
+    onClick={onOpenImport}
+    className="bg-[#2B98BA] hover:bg-[#2183A0] text-white text-xs font-black px-3.5 py-1.5 rounded-lg flex items-center gap-1.5 transition-all shadow-xs active:scale-95 cursor-pointer"
+    title="Importar Excel con nuevas tareas o actualizaciones"
+  >
+    <Upload className="w-3.5 h-3.5" />
+    <span>Cargar Excel</span>
+  </button>
+)}
 
               {totalTasksCount > 0 && (
                 <button
@@ -206,60 +186,56 @@ export const Header: React.FC<HeaderProps> = ({
                 </button>
               )}
 
-              {/* Database Options Dropdown */}
-              <div className="relative" ref={menuRef}>
-                <button
-                  type="button"
-                  onClick={() => setShowDbMenu(!showDbMenu)}
-                  className="text-slate-300 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition-colors flex items-center gap-0.5 border border-white/10 cursor-pointer"
-                  title="Opciones de base de datos"
-                >
-                  <Database className="w-3.5 h-3.5 text-[#4AC3E7]" />
-                  <ChevronDown className="w-3 h-3 text-slate-400" />
-                </button>
+             {/* Database Options Dropdown */}
+{userRole.role === 'ADMIN' && (
+  <div className="relative" ref={menuRef}>
+    <button
+      type="button"
+      onClick={() => setShowDbMenu(!showDbMenu)}
+      className="text-slate-300 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition-colors flex items-center gap-0.5 border border-white/10 cursor-pointer"
+      title="Opciones de base de datos"
+    >
+      <Database className="w-3.5 h-3.5 text-[#4AC3E7]" />
+      <ChevronDown className="w-3 h-3 text-slate-400" />
+    </button>
 
-                {showDbMenu && (
-                  <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-xl border border-[#D5E5ED] py-1 z-50 text-slate-800 text-xs animate-fade-in">
-                    <div className="px-3 py-1.5 border-b border-[#EBF3F7] text-[10px] uppercase font-bold text-slate-400">
-                      Gestión de Datos OCD
-                    </div>
-                    
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowDbMenu(false);
-                        onResetData();
-                      }}
-                      className="w-full text-left px-3.5 py-2 hover:bg-[#F2FAFD] flex items-center gap-2 text-[#0B2F5B] font-semibold cursor-pointer"
-                    >
-                      <Sparkles className="w-3.5 h-3.5 text-[#2B98BA]" />
-                      <span>Cargar datos demo (Prueba)</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowDbMenu(false);
-                        if (confirm('¿Estás seguro de que deseas vaciar toda la información de tareas y lotes cargados?')) {
-                          onClearData();
-                        }
-                      }}
-                      className="w-full text-left px-3.5 py-2 hover:bg-rose-50 flex items-center gap-2 text-rose-700 font-semibold cursor-pointer border-t border-[#EBF3F7]"
-                    >
-                      <Trash2 className="w-3.5 h-3.5 text-rose-500" />
-                      <span>Limpiar / Vaciar base de datos</span>
-                    </button>
-                  </div>
-                )}
-              </div>
-
-            </div>
-
-          </div>
-
+    {showDbMenu && (
+      <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-xl border border-[#D5E5ED] py-1 z-50 text-slate-800 text-xs animate-fade-in">
+        <div className="px-3 py-1.5 border-b border-[#EBF3F7] text-[10px] uppercase font-bold text-slate-400">
+          Gestión de Datos OCD
         </div>
-      </div>
-    </header>
-  );
-};
 
+        <button
+          type="button"
+          onClick={() => {
+            setShowDbMenu(false);
+            onResetData();
+          }}
+          className="w-full text-left px-3.5 py-2 hover:bg-[#F2FAFD] flex items-center gap-2 text-[#0B2F5B] font-semibold cursor-pointer"
+        >
+          <Sparkles className="w-3.5 h-3.5 text-[#2B98BA]" />
+          <span>Cargar datos demo (Prueba)</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setShowDbMenu(false);
+
+            if (
+              confirm(
+                '¿Estás seguro de que deseas vaciar toda la información de tareas y lotes cargados?'
+              )
+            ) {
+              onClearData();
+            }
+          }}
+          className="w-full text-left px-3.5 py-2 hover:bg-rose-50 flex items-center gap-2 text-rose-700 font-semibold cursor-pointer border-t border-[#EBF3F7]"
+        >
+          <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+          <span>Limpiar / Vaciar base de datos</span>
+        </button>
+      </div>
+    )}
+  </div>
+)}
