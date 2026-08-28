@@ -75,6 +75,28 @@ function parseExcelUrl(raw: unknown): string {
   return str;
 }
 
+function parseBooleanLike(raw: unknown): boolean | undefined {
+  if (raw === undefined || raw === null || raw === '') return undefined;
+  if (typeof raw === 'boolean') return raw;
+  if (typeof raw === 'number') return raw !== 0;
+
+  const value = String(raw)
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+
+  if (['si', 'sí', 's', 'true', 'verdadero', '1', 'x', 'ok', 'completada', 'completo', 'justificada', 'invalidada'].includes(value)) {
+    return true;
+  }
+
+  if (['no', 'n', 'false', 'falso', '0', 'pendiente', 'sin completar', 'no completada', 'sin justificar', 'valida', 'validada'].includes(value)) {
+    return false;
+  }
+
+  return undefined;
+}
+
 export function parseExcelFile(
   fileBuffer: ArrayBuffer,
   fileName: string,
@@ -158,12 +180,28 @@ export function parseExcelFile(
    * las alternativas disponibles.
    */
   const resolveColumn = (possibleKeys: string[]): number => {
+    // 1) Coincidencia exacta
     for (const key of possibleKeys) {
       const normalized = normalizeHeader(key);
       const index = headerIndex.get(normalized);
 
       if (index !== undefined) {
         return index;
+      }
+    }
+
+    // 2) Coincidencia flexible para encabezados como
+    // "Nombre del vendedor", "Fecha de ejecución", "URL evidencia foto", etc.
+    const entries = Array.from(headerIndex.entries());
+
+    for (const key of possibleKeys) {
+      const normalizedKey = normalizeHeader(key);
+      if (normalizedKey.length < 4) continue;
+
+      for (const [header, index] of entries) {
+        if (header.includes(normalizedKey) || normalizedKey.includes(header)) {
+          return index;
+        }
       }
     }
 
@@ -175,131 +213,103 @@ export function parseExcelFile(
    */
   const columns = {
     id: resolveColumn([
-      'id',
-      'id_tarea',
-      'codigo_tarea',
-      'task_id',
-      'cod_registro',
+      'id', 'id_tarea', 'codigo_tarea', 'task_id', 'cod_registro',
+      'id registro', 'id de tarea', 'identificador tarea'
     ]),
 
     fecha: resolveColumn([
-      'fecha',
-      'fecha_tarea',
-      'date',
-      'dia',
-      'fecha_visita',
+      'fecha', 'fecha_tarea', 'date', 'dia', 'fecha_visita',
+      'fecha de tarea', 'fecha ejecucion', 'fecha de ejecucion',
+      'fecha realizacion', 'fecha de realizacion'
     ]),
 
     vendedor: resolveColumn([
-      'vendedor',
-      'preventista',
-      'ejecutivo',
-      'nombre_vendedor',
-      'promotor',
+      'vendedor', 'preventista', 'ejecutivo', 'nombre_vendedor', 'promotor',
+      'nombre del vendedor', 'usuario vendedor', 'responsable', 'asesor comercial'
     ]),
 
     codigoVendedor: resolveColumn([
-      'codigo_vendedor',
-      'cod_vendedor',
-      'legajo',
-      'id_vendedor',
+      'codigo_vendedor', 'cod_vendedor', 'legajo', 'id_vendedor',
+      'codigo vendedor', 'cod vendedor', 'codigo preventista'
     ]),
 
     supervisor: resolveColumn([
-      'supervisor',
-      'lider',
-      'jefe',
-      'nombre_supervisor',
+      'supervisor', 'lider', 'jefe', 'nombre_supervisor',
+      'nombre del supervisor', 'supervisor vendedor'
     ]),
 
     ruta: resolveColumn([
-      'ruta',
-      'zona',
-      'territorio',
-      'circuito',
+      'ruta', 'zona', 'territorio', 'circuito',
+      'ruta vendedor', 'ruta comercial'
     ]),
 
     codigoPDV: resolveColumn([
-      'codigo_pdv',
-      'cod_pdv',
-      'pdv_codigo',
-      'cliente_codigo',
-      'id_cliente',
+      'codigo_pdv', 'cod_pdv', 'pdv_codigo', 'cliente_codigo', 'id_cliente',
+      'codigo pdv', 'codigo cliente', 'cod cliente', 'id pdv', 'codigo punto de venta'
     ]),
 
     nombrePDV: resolveColumn([
-      'nombre_pdv',
-      'pdv',
-      'cliente',
-      'razon_social',
-      'nombre_cliente',
-      'comercio',
+      'nombre_pdv', 'pdv', 'cliente', 'razon_social', 'nombre_cliente', 'comercio',
+      'punto de venta', 'nombre punto de venta', 'nombre del cliente', 'nombre comercio'
     ]),
 
     direccionPDV: resolveColumn([
-      'direccion',
-      'domicilio',
-      'ubicacion',
-      'calle',
+      'direccion', 'domicilio', 'ubicacion', 'calle',
+      'direccion pdv', 'direccion cliente', 'direccion punto de venta'
     ]),
 
     categoriaTarea: resolveColumn([
-      'categoria',
-      'categoria_tarea',
-      'rubro',
-      'tipo_tarea',
-      'tipo',
+      'categoria', 'categoria_tarea', 'rubro', 'tipo_tarea', 'tipo',
+      'categoria tarea', 'tipo de tarea', 'grupo tarea'
     ]),
 
     nombreTarea: resolveColumn([
-      'tarea',
-      'nombre_tarea',
-      'mision',
-      'item',
-      'descripcion_tarea',
+      'tarea', 'nombre_tarea', 'mision', 'item', 'descripcion_tarea',
+      'nombre tarea', 'descripcion tarea', 'tarea comercial', 'actividad', 'ejecucion'
+    ]),
+
+    completada: resolveColumn([
+      'completada', 'completado', 'tarea completada', 'estado completada',
+      'realizada', 'realizado', 'ejecutada', 'ejecutado', 'cumplida', 'cumplido'
+    ]),
+
+    invalidada: resolveColumn([
+      'invalidada', 'invalidado', 'tarea invalidada', 'es invalidada',
+      'rechazada', 'rechazado', 'valida', 'validada'
+    ]),
+
+    justificada: resolveColumn([
+      'justificada', 'justificado', 'tarea justificada', 'es justificada',
+      'con justificacion', 'justificacion'
     ]),
 
     estado: resolveColumn([
-      'estado',
-      'estado_validacion',
-      'validacion',
-      'resultado',
-      'status',
+      'estado', 'estado_validacion', 'validacion', 'resultado', 'status',
+      'estado validacion', 'resultado validacion', 'estado auditoria'
     ]),
 
     motivoInvalidacion: resolveColumn([
-      'motivo',
-      'motivo_invalidacion',
-      'causa_rechazo',
-      'razon_invalidacion',
-      'invalidation_reason',
+      'motivo', 'motivo_invalidacion', 'causa_rechazo', 'razon_invalidacion',
+      'invalidation_reason', 'motivo invalidacion', 'motivo rechazo'
     ]),
 
     detalleInvalidacion: resolveColumn([
-      'detalle',
-      'detalle_invalidacion',
-      'observacion',
-      'comentario_auditor',
-      'notas',
+      'detalle', 'detalle_invalidacion', 'observacion', 'comentario_auditor',
+      'notas', 'detalle invalidacion', 'comentario auditor', 'observaciones'
     ]),
 
     foto: resolveColumn([
-      'foto',
-      'url_foto',
-      'url_foto_original',
-      'foto_original',
-      'evidencia',
-      'link_foto',
-      'imagen',
+      'foto', 'url_foto', 'url_foto_original', 'foto_original', 'evidencia',
+      'link_foto', 'imagen', 'fotografia', 'foto evidencia', 'evidencia fotografica',
+      'url imagen', 'url evidencia', 'link evidencia', 'imagen evidencia',
+      'foto tarea', 'foto de tarea'
     ]),
 
     puntajeBase: resolveColumn([
-      'puntaje_base',
-      'puntos_base',
-      'peso_tarea',
-      'puntos',
+      'puntaje_base', 'puntos_base', 'peso_tarea', 'puntos'
     ]),
   };
+
 
   const batchId = 'batch_' + Date.now();
   const importDate = new Date().toISOString();
@@ -445,21 +455,29 @@ export function parseExcelFile(
       );
 
       /*
-       * Estado
+       * Estados operativos
        */
-      const rawEstado = getValByColumn(
-        columns.estado
-      ).toUpperCase();
+      const rawEstado = getValByColumn(columns.estado).toUpperCase();
+      const completadaFlag = parseBooleanLike(getRawByColumn(columns.completada));
+      const invalidadaFlag = parseBooleanLike(getRawByColumn(columns.invalidada));
+      const justificadaFlag = parseBooleanLike(getRawByColumn(columns.justificada));
 
-      let estadoValidacion: ValidationStatus = 'VALIDADA';
+      let estadoValidacion: ValidationStatus = 'PENDIENTE_AUDITORIA';
 
       if (
         rawEstado.includes('INVAL') ||
         rawEstado.includes('RECHAZ') ||
-        rawEstado.includes('NO') ||
-        rawEstado.includes('FALL')
+        rawEstado.includes('FALL') ||
+        invalidadaFlag === true
       ) {
         estadoValidacion = 'INVALIDADA';
+      } else if (
+        rawEstado.includes('VALID') ||
+        rawEstado.includes('APROB') ||
+        rawEstado.includes('OK') ||
+        invalidadaFlag === false
+      ) {
+        estadoValidacion = 'VALIDADA';
       } else if (
         rawEstado.includes('PEND') ||
         rawEstado.includes('REV') ||
@@ -467,6 +485,9 @@ export function parseExcelFile(
       ) {
         estadoValidacion = 'PENDIENTE_AUDITORIA';
       }
+
+      const completada = completadaFlag ?? Boolean(rawEstado);
+      const justificada = justificadaFlag ?? false;
 
       const motivoInvalidacion =
         getValByColumn(columns.motivoInvalidacion) ||
@@ -480,10 +501,25 @@ export function parseExcelFile(
         getValByColumn(columns.detalleInvalidacion);
 
       /*
-       * Foto
+       * Foto / evidencia
+       * Primero intentamos leer el hipervínculo real de la celda (cell.l.Target).
+       * Si no existe, usamos el contenido visible o una fórmula HYPERLINK().
        */
-      const rawFotoUrl = getRawByColumn(columns.foto);
-      const urlFotoOriginal = parseExcelUrl(rawFotoUrl);
+      let urlFotoOriginal = '';
+
+      if (columns.foto >= 0) {
+        const cellAddress = XLSX.utils.encode_cell({
+          r: index + 1, // +1 porque matrix[0] son encabezados
+          c: columns.foto,
+        });
+
+        const photoCell = worksheet[cellAddress] as XLSX.CellObject | undefined;
+        const hyperlinkTarget = photoCell?.l?.Target;
+
+        urlFotoOriginal = parseExcelUrl(
+          hyperlinkTarget || photoCell?.f || photoCell?.v || getRawByColumn(columns.foto)
+        );
+      }
 
       /*
        * Puntaje
@@ -544,6 +580,10 @@ export function parseExcelFile(
           nombreTarea,
 
           estadoValidacion,
+
+          completada,
+
+          justificada,
 
           motivoInvalidacion:
             motivoInvalidacion ||
@@ -606,6 +646,10 @@ export function parseExcelFile(
           nombreTarea,
 
           estadoValidacion,
+
+          completada,
+
+          justificada,
 
           motivoInvalidacion,
 
@@ -685,8 +729,6 @@ export function exportTasksToExcel(tasks: TaskRecord[], fileName = 'Reporte_Vali
     'Motivo Invalidación': t.motivoInvalidacion || '',
     'Detalle Auditoría': t.detalleInvalidacion || '',
     'URL Foto Original': t.urlFotoOriginal || '',
-    'Puntaje Base': t.puntajeBase,
-    'Puntaje Final': t.puntajeObtenido,
     'Estado Apelación': t.estadoApelacion,
     'Fecha Apelación': t.fechaApelacion ? new Date(t.fechaApelacion).toLocaleString('es-AR') : '',
     'Motivo Apelación Vendedor': t.motivoApelacion || '',
