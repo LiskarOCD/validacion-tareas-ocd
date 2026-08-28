@@ -239,3 +239,10 @@ export const Header: React.FC<HeaderProps> = ({
     )}
   </div>
 )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+  );
+};
