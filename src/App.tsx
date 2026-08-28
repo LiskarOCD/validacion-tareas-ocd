@@ -440,23 +440,488 @@ useEffect(() => {
     showToast('Base de datos vaciada. Puedes cargar tu archivo Excel.', 'info');
   };
 
-  const handleImportSuccess = (result: ParseResult) => {
-    let updatedTasksList: TaskRecord[];
-    let updatedBatches: ImportBatch[];
+  const handleImportSuccess = async (result: ParseResult) => {
+  try {
+    showToast(
+      `Importando ${result.tasks.length.toLocaleString()} tareas a Supabase...`,
+      'info'
+    );
+
+    // 1. Obtener usuario autenticado
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError) {
+      throw userError;
+    }
+
+    if (!user) {
+      throw new Error('No hay un usuario autenticado.');
+    }
+
+    // 2. Crear lote de importación
+    const { data: createdBatch, error: batchError } = await supabase
+      .from('import_batches')
+      .insert({
+        file_name: result.batch.fileName,
+        total_rows: result.tasks.length,
+        inserted_rows: 0,
+        updated_rows: 0,
+        skipped_rows: result.batch.skippedRows ?? 0,
+        created_by: user.id,
+      })
+      .select('*')
+      .single();
+
+    if (batchError) {
+      throw new Error(
+        `No se pudo crear el lote: ${batchError.message}`
+      );
+    }
+
+    if (!createdBatch) {
+      throw new Error('Supabase no devolvió el lote creado.');
+    }
+
+    console.log('✅ Lote creado:', createdBatch.id);
+
+    // 3. Si es replace, borrar tareas anteriores
+    if (result.mode === 'replace') {
+      const { error: deleteError } = await supabase
+        .from('tasks')
+        .delete()
+        .not('id', 'is', null);
+
+      if (deleteError) {
+        throw new Error(
+          `No se pudieron borrar las tareas anteriores: ${deleteError.message}`
+        );
+      }
+    }
+
+    // 4. Convertir TaskRecord al formato de Supabase
+    const rowsToInsert = result.tasks.map((task) => ({
+      id: task.id,
+
+      import_batch_id: createdBatch.id,
+      import_date: createdBatch.import_date,
+
+      fecha_tarea: task.fechaTarea,
+
+      vendedor: task.vendedor || '',
+      codigo_vendedor: task.codigoVendedor || null,
+
+      supervisor: task.supervisor || '',
+
+      ruta: task.ruta || null,
+
+      codigo_pdv: task.codigoPDV || null,
+      nombre_pdv: task.nombrePDV || null,
+      direccion_pdv: task.direccionPDV || null,
+
+      categoria_tarea: task.categoriaTarea || null,
+      nombre_tarea: task.nombreTarea || null,
+
+      completada: Boolean(task.completada),
+
+      invalidada:
+        task.estadoValidacion === 'INVALIDADA',
+
+      justificada: Boolean(task.justificada),
+
+      visita_valida:
+        task.visitaValida === undefined
+          ? null
+          : Boolean(task.visitaValida),
+
+      estado_validacion:
+        task.estadoValidacion || 'VALIDADA',
+
+      motivo_invalidacion:
+        task.motivoInvalidacion || null,
+
+      detalle_invalidacion:
+        task.detalleInvalidacion || null,
+
+      url_foto_original:
+        task.urlFotoOriginal || null,
+
+      puntaje_base:
+        Number(task.puntajeBase ?? 20),
+
+      puntaje_obtenido:
+        Number(task.puntajeObtenido ?? 0),
+
+      estado_apelacion:
+        task.estadoApelacion || 'SIN_APELAR',
+
+      fecha_apelacion:
+        task.fechaApelacion || null,
+
+      motivo_apelacion:
+        task.motivoApelacion || null,
+
+      comentarios_vendedor:
+        task.comentariosVendedor || null,
+
+      evidencia_apelacion_url:
+        task.evidenciaApelacionUrl || null,
+
+      fecha_resolucion:
+        task.fechaResolucion || null,
+
+      supervisor_resolutor:
+        task.supervisorResolutor || null,
+
+      dictamen_resolucion:
+        task.dictamenResolucion || null,
+
+      comentario_resolucion:
+        task.comentarioResolucion || null,
+
+      puntaje_ajustado:
+        task.puntajeAjustado === undefined
+          ? null
+          : Number(task.puntajeAjustado),
+    }));
+
+    // 5. Subir por bloques
+    const CHUNK_SIZE = 500;
+
+    let processedRows = 0;
+
+    for (
+      let i = 0;
+      i < rowsToInsert.length;
+      i += CHUNK_SIZE
+    ) {
+      const chunk = rowsToInsert.slice(
+        i,
+        i + CHUNK_SIZE
+      );
+
+      let uploadError = null;
+
+      if (result.mode === 'merge') {
+        const { error } = await supabase
+          .from('tasks')
+          .upsert(chunk, {
+            onConflict: 'id',
+          });
+
+        uploadError = error;
+      } else {
+        const { error } = await supabase
+          .from('tasks')
+          .insert(chunk);
+
+        uploadError = error;
+      }
+
+      if (uploadError) {
+        throw new Error(
+          `Error en filas ${i + 1}-${Math.min(
+            i + CHUNK_SIZE,
+            rowsToInsert.length
+          )}: ${uploadError.message}`
+        );
+      }
+
+      processedRows += chunk.length;
+
+      console.log(
+        `📦 ${processedRows.toLocaleString()} / ${rowsToInsert.length.toLocaleString()}`
+      );
+    }
+
+    // 6. Actualizar lote
+    const insertedCount =
+      result.mode === 'replace'
+        ? processedRows
+        : result.batch.insertedRows ?? processedRows;
+
+    const updatedCount =
+      result.mode === 'merge'
+        ? result.batch.updatedRows ?? 0
+        : 0;
+
+    const { error: updateBatchError } =
+      await supabase
+        .from('import_batches')
+        .update({
+          inserted_rows: insertedCount,
+          updated_rows: updatedCount,
+          skipped_rows:
+            result.batch.skippedRows ?? 0,
+        })
+        .eq('id', createdBatch.id);
+
+    if (updateBatchError) {
+      console.error(
+        '⚠️ Error actualizando import_batches:',
+        updateBatchError
+      );
+    }
+
+    // 7. Volver a cargar todas las tareas desde Supabase
+    const allRows: any[] = [];
+
+    const pageSize = 1000;
+    let from = 0;
+
+    while (true) {
+      const { data, error } = await supabase
+        .from('tasks')
+        .select('*')
+        .order('fecha_tarea', {
+          ascending: false,
+        })
+        .range(from, from + pageSize - 1);
+
+      if (error) {
+        throw new Error(
+          `Las tareas se guardaron pero no se pudieron recargar: ${error.message}`
+        );
+      }
+
+      if (!data || data.length === 0) {
+        break;
+      }
+
+      allRows.push(...data);
+
+      if (data.length < pageSize) {
+        break;
+      }
+
+      from += pageSize;
+    }
+
+    // 8. Mapear Supabase a TaskRecord
+    const refreshedTasks: TaskRecord[] =
+      allRows.map((row) => ({
+        id: row.id,
+
+        importBatchId:
+          row.import_batch_id ?? undefined,
+
+        importDate:
+          row.import_date ?? '',
+
+        fechaTarea:
+          row.fecha_tarea ?? '',
+
+        vendedor:
+          row.vendedor ?? '',
+
+        codigoVendedor:
+          row.codigo_vendedor ?? undefined,
+
+        supervisor:
+          row.supervisor ?? '',
+
+        ruta:
+          row.ruta ?? '',
+
+        codigoPDV:
+          row.codigo_pdv ?? '',
+
+        nombrePDV:
+          row.nombre_pdv ?? '',
+
+        direccionPDV:
+          row.direccion_pdv ?? undefined,
+
+        categoriaTarea:
+          row.categoria_tarea ?? '',
+
+        nombreTarea:
+          row.nombre_tarea ?? '',
+
+        estadoValidacion:
+          (row.estado_validacion ??
+            'VALIDADA') as TaskRecord['estadoValidacion'],
+
+        completada:
+          Boolean(row.completada),
+
+        justificada:
+          Boolean(row.justificada),
+
+        visitaValida:
+          row.visita_valida === null ||
+          row.visita_valida === undefined
+            ? undefined
+            : Boolean(row.visita_valida),
+
+        motivoInvalidacion:
+          row.motivo_invalidacion ??
+          undefined,
+
+        detalleInvalidacion:
+          row.detalle_invalidacion ??
+          undefined,
+
+        urlFotoOriginal:
+          row.url_foto_original ??
+          undefined,
+
+        puntajeBase:
+          Number(row.puntaje_base ?? 20),
+
+        puntajeObtenido:
+          Number(
+            row.puntaje_obtenido ?? 0
+          ),
+
+        estadoApelacion:
+          (row.estado_apelacion ??
+            'SIN_APELAR') as TaskRecord['estadoApelacion'],
+
+        fechaApelacion:
+          row.fecha_apelacion ??
+          undefined,
+
+        motivoApelacion:
+          row.motivo_apelacion ??
+          undefined,
+
+        evidenciaApelacionUrl:
+          row.evidencia_apelacion_url ??
+          undefined,
+
+        comentariosVendedor:
+          row.comentarios_vendedor ??
+          undefined,
+
+        fechaResolucion:
+          row.fecha_resolucion ??
+          undefined,
+
+        supervisorResolutor:
+          row.supervisor_resolutor ??
+          undefined,
+
+        dictamenResolucion:
+          row.dictamen_resolucion ??
+          undefined,
+
+        comentarioResolucion:
+          row.comentario_resolucion ??
+          undefined,
+
+        puntajeAjustado:
+          row.puntaje_ajustado === null ||
+          row.puntaje_ajustado === undefined
+            ? undefined
+            : Number(
+                row.puntaje_ajustado
+              ),
+
+        updatedAt:
+          row.updated_at ?? undefined,
+      }));
+
+    setTasks(refreshedTasks);
+
+    // 9. Crear lote para React
+    const newBatchForReact: ImportBatch = {
+      ...result.batch,
+
+      id: createdBatch.id,
+
+      fileName:
+        createdBatch.file_name,
+
+      importDate:
+        createdBatch.import_date,
+
+      totalRows:
+        createdBatch.total_rows,
+
+      insertedRows:
+        insertedCount,
+
+      updatedRows:
+        updatedCount,
+
+      skippedRows:
+        createdBatch.skipped_rows ?? 0,
+    };
 
     if (result.mode === 'replace') {
-      // Complete replacement with the new Excel content
-      updatedTasksList = result.tasks;
-      updatedBatches = [result.batch];
+      setBatches([newBatchForReact]);
     } else {
-      // Merge mode
-      updatedTasksList = [...result.tasks];
-      const newIds = new Set(result.tasks.map((t) => t.id));
-      tasks.forEach((existing) => {
-        if (!newIds.has(existing.id)) {
-          updatedTasksList.push(existing);
-        }
+      setBatches((prev) => [
+        newBatchForReact,
+        ...prev.filter(
+          (batch) =>
+            batch.id !== newBatchForReact.id
+        ),
+      ]);
+    }
+
+    // 10. Limpiar filtros
+    setFilters({
+      searchTerm: '',
+      vendedor: '',
+      supervisor: '',
+      ruta: '',
+      categoria: '',
+      estadoValidacion: '',
+      estadoApelacion: '',
+      fechaDesde: '',
+      fechaHasta: '',
+    });
+
+    const newSellers = new Set(
+      refreshedTasks.map(
+        (task) => task.vendedor
+      )
+    );
+
+    if (
+      userRole.role === 'VENDEDOR' &&
+      (
+        !userRole.selectedVendedor ||
+        !newSellers.has(
+          userRole.selectedVendedor
+        )
+      )
+    ) {
+      setUserRole({
+        role: 'SUPERVISOR',
+        name: 'Supervisor General OCD',
       });
+    }
+
+    setIsImportModalOpen(false);
+
+    showToast(
+      `Importación completada: ${processedRows.toLocaleString()} tareas guardadas en Supabase.`,
+      'success'
+    );
+
+    console.log(
+      `✅ Importación completada. ${refreshedTasks.length.toLocaleString()} tareas disponibles.`
+    );
+  } catch (error: any) {
+    console.error(
+      '❌ Error durante la importación:',
+      error
+    );
+
+    showToast(
+      `Error al importar: ${
+        error?.message ||
+        'Error desconocido'
+      }`,
+      'error'
+    );
+  }
+};
       updatedBatches = [result.batch, ...batches];
     }
 
