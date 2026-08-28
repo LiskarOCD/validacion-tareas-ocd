@@ -6,6 +6,7 @@ import {
   FilterState,
   ImportBatch
 } from './types';
+import { supabase } from './lib/supabase';
 import { 
   loadStoredTasks, 
   loadStoredTasksAsync,
@@ -29,7 +30,6 @@ import { BatchesHistoryView } from './components/BatchesHistoryView';
 import { EmptyState } from './components/EmptyState';
 import { OcdLogo } from './components/OcdLogo';
 import { LoginPage } from './components/LoginPage';
-import { supabase } from './lib/supabase';
 import { ParseResult } from './utils/excelParser';
 import { CheckCircle2, AlertCircle, Info } from 'lucide-react';
 
@@ -124,29 +124,141 @@ useEffect(() => {
     subscription.unsubscribe();
   };
 }, []);
-  const [tasks, setTasks] = useState<TaskRecord[]>(() => loadStoredTasks());
+  const [tasks, setTasks] = useState<TaskRecord[]>([]);
   const [batches, setBatches] = useState<ImportBatch[]>(() => loadStoredBatches());
   const [activeView, setActiveView] = useState<'tasks' | 'analytics' | 'batches'>('tasks');
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'info' | 'error' } | null>(null);
 
-  // Background hydration from IndexedDB on startup
-  useEffect(() => {
-    let isMounted = true;
-    async function hydrateFromStorage() {
-      try {
-        const idbTasks = await loadStoredTasksAsync();
-        if (isMounted && idbTasks && Array.isArray(idbTasks)) {
-          setTasks(idbTasks);
+// Cargar tareas compartidas desde Supabase
+useEffect(() => {
+  let isMounted = true;
+
+  async function loadTasksFromSupabase() {
+    if (!isAuthenticated || !profile) return;
+
+    try {
+      const allRows: any[] = [];
+      const pageSize = 1000;
+      let from = 0;
+
+      while (true) {
+        const { data, error } = await supabase
+          .from('tasks')
+          .select('*')
+          .order('fecha_tarea', { ascending: false })
+          .range(from, from + pageSize - 1);
+
+        if (error) {
+          throw error;
         }
-      } catch (err) {
-        console.warn('Hydration notice:', err);
+
+        if (!data || data.length === 0) {
+          break;
+        }
+
+        allRows.push(...data);
+
+        if (data.length < pageSize) {
+          break;
+        }
+
+        from += pageSize;
       }
+
+      if (!isMounted) return;
+
+      const mappedTasks: TaskRecord[] = allRows.map((row) => ({
+        id: row.id,
+
+        importBatchId: row.import_batch_id ?? undefined,
+        importDate: row.import_date ?? '',
+
+        fechaTarea: row.fecha_tarea ?? '',
+
+        vendedor: row.vendedor ?? '',
+        codigoVendedor: row.codigo_vendedor ?? undefined,
+
+        supervisor: row.supervisor ?? '',
+
+        ruta: row.ruta ?? '',
+
+        codigoPDV: row.codigo_pdv ?? '',
+        nombrePDV: row.nombre_pdv ?? '',
+        direccionPDV: row.direccion_pdv ?? undefined,
+
+        categoriaTarea: row.categoria_tarea ?? '',
+        nombreTarea: row.nombre_tarea ?? '',
+
+        estadoValidacion:
+          (row.estado_validacion ??
+            'VALIDADA') as TaskRecord['estadoValidacion'],
+
+        completada: Boolean(row.completada),
+        justificada: Boolean(row.justificada),
+        visitaValida:
+          row.visita_valida === null || row.visita_valida === undefined
+            ? undefined
+            : Boolean(row.visita_valida),
+
+        motivoInvalidacion: row.motivo_invalidacion ?? undefined,
+        detalleInvalidacion: row.detalle_invalidacion ?? undefined,
+
+        urlFotoOriginal: row.url_foto_original ?? undefined,
+
+        puntajeBase: Number(row.puntaje_base ?? 20),
+        puntajeObtenido: Number(row.puntaje_obtenido ?? 0),
+
+        estadoApelacion:
+          (row.estado_apelacion ??
+            'SIN_APELAR') as TaskRecord['estadoApelacion'],
+
+        fechaApelacion: row.fecha_apelacion ?? undefined,
+        motivoApelacion: row.motivo_apelacion ?? undefined,
+
+        evidenciaApelacionUrl:
+          row.evidencia_apelacion_url ?? undefined,
+
+        comentariosVendedor:
+          row.comentarios_vendedor ?? undefined,
+
+        fechaResolucion: row.fecha_resolucion ?? undefined,
+        supervisorResolutor:
+          row.supervisor_resolutor ?? undefined,
+
+        dictamenResolucion:
+          row.dictamen_resolucion ?? undefined,
+
+        comentarioResolucion:
+          row.comentario_resolucion ?? undefined,
+
+        puntajeAjustado:
+          row.puntaje_ajustado === null ||
+          row.puntaje_ajustado === undefined
+            ? undefined
+            : Number(row.puntaje_ajustado),
+
+        updatedAt: row.updated_at ?? undefined,
+      }));
+
+      setTasks(mappedTasks);
+
+      console.log(
+        `✅ ${mappedTasks.length} tareas cargadas desde Supabase`
+      );
+    } catch (error) {
+      console.error(
+        '❌ Error cargando tareas desde Supabase:',
+        error
+      );
     }
-    hydrateFromStorage();
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+  }
+
+  loadTasksFromSupabase();
+
+  return () => {
+    isMounted = false;
+  };
+}, [isAuthenticated, profile]);
 
 const [userRole, setUserRole] = useState<UserRole>({
   role: 'ADMIN',
