@@ -668,7 +668,6 @@ export function parseExcelFile(
     mode,
   };
 }
-
 export function exportTasksToExcel(tasks: TaskRecord[], fileName = 'Reporte_Validacion_Tareas_OCD.xlsx') {
   const exportData = tasks.map((t) => ({
     'ID Registro': t.id,
