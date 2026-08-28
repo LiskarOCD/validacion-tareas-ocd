@@ -922,34 +922,7 @@ useEffect(() => {
     );
   }
 };
-      updatedBatches = [result.batch, ...batches];
-    }
-
-    setTasks(updatedTasksList);
-    saveStoredTasks(updatedTasksList);
-
-    setBatches(updatedBatches);
-    saveStoredBatches(updatedBatches);
-
-    // Reset filters and ensure role is valid
-    setFilters({
-      searchTerm: '',
-      vendedor: '',
-      supervisor: '',
-      ruta: '',
-      categoria: '',
-      estadoValidacion: '',
-      estadoApelacion: '',
-      fechaDesde: '',
-      fechaHasta: '',
-    });
-
-    const newSellers = new Set(updatedTasksList.map((t) => t.vendedor));
-    if (userRole.role === 'VENDEDOR' && (!userRole.selectedVendedor || !newSellers.has(userRole.selectedVendedor))) {
-      setUserRole({ role: 'SUPERVISOR', name: 'Supervisor General OCD' });
-    }
-
-   
+     
   const handleSubmitAppeal = (
     taskId: string,
     motivoApelacion: string,
