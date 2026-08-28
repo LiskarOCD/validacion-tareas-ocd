@@ -18,8 +18,8 @@ import { UserRole } from '../types';
 import { OcdLogo } from './OcdLogo';
 
 interface HeaderProps {
-  user: User;
-  onChange: (: User) => void;
+  userRole: UserRole;
+  onRoleChange: (role: UserRole) => void;
   vendedoresList: string[];
   onOpenImport: () => void;
   onOpenExport: () => void;
