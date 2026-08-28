@@ -22,10 +22,45 @@ import { AnalyticsView } from './components/AnalyticsView';
 import { BatchesHistoryView } from './components/BatchesHistoryView';
 import { EmptyState } from './components/EmptyState';
 import { OcdLogo } from './components/OcdLogo';
+import { LoginPage } from './components/LoginPage';
+import { supabase } from './lib/supabase';
 import { ParseResult } from './utils/excelParser';
 import { CheckCircle2, AlertCircle, Info } from 'lucide-react';
 
 export function App() {
+  const [authLoading, setAuthLoading] = useState(true);
+const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+useEffect(() => {
+  let mounted = true;
+
+  async function loadSession() {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!mounted) return;
+
+    setIsAuthenticated(Boolean(session));
+    setAuthLoading(false);
+  }
+
+  loadSession();
+
+  const {
+    data: { subscription },
+  } = supabase.auth.onAuthStateChange((_event, session) => {
+    if (!mounted) return;
+
+    setIsAuthenticated(Boolean(session));
+    setAuthLoading(false);
+  });
+
+  return () => {
+    mounted = false;
+    subscription.unsubscribe();
+  };
+}, []);
   const [tasks, setTasks] = useState<TaskRecord[]>(() => loadStoredTasks());
   const [batches, setBatches] = useState<ImportBatch[]>(() => loadStoredBatches());
   const [activeView, setActiveView] = useState<'tasks' | 'analytics' | 'batches'>('tasks');
@@ -325,6 +360,23 @@ export function App() {
     showToast(`Dictamen registrado como ${dictamen}. Puntaje actualizado.`, 'success');
   };
 
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-slate-100 flex items-center justify-center">
+        <div className="text-[#0B2F5B] font-semibold">
+          Cargando sistema OCD...
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <LoginPage
+        onLoginSuccess={() => setIsAuthenticated(true)}
+      />
+    );
+  }
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col selection:bg-[#2B98BA] selection:text-white">
       
