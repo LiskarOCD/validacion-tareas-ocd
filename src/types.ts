@@ -9,11 +9,16 @@ export type AppealStatus =
   | 'APROBADA'
   | 'RECHAZADA';
 
-export type UserRole =
+export type RoleName =
   | 'ADMIN'
   | 'SUPERVISOR'
   | 'VENDEDOR';
 
+export interface UserRole {
+  role: RoleName;
+  name: string;
+  selectedVendedor?: string;
+}
 export interface TaskRecord {
   id: string;
 
@@ -115,7 +120,7 @@ export interface UserProfile {
 
   nombre: string;
 
-  role: UserRole;
+ role: RoleName;
 
   vendedor?: string;
 
