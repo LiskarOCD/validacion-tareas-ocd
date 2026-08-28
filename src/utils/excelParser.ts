@@ -75,28 +75,6 @@ function parseExcelUrl(raw: unknown): string {
   return str;
 }
 
-function parseBooleanLike(raw: unknown): boolean | undefined {
-  if (raw === undefined || raw === null || raw === '') return undefined;
-  if (typeof raw === 'boolean') return raw;
-  if (typeof raw === 'number') return raw !== 0;
-
-  const value = String(raw)
-    .trim()
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '');
-
-  if (['si', 'sí', 's', 'true', 'verdadero', '1', 'x', 'ok', 'completada', 'completo', 'justificada', 'invalidada'].includes(value)) {
-    return true;
-  }
-
-  if (['no', 'n', 'false', 'falso', '0', 'pendiente', 'sin completar', 'no completada', 'sin justificar', 'valida', 'validada'].includes(value)) {
-    return false;
-  }
-
-  return undefined;
-}
-
 export function parseExcelFile(
   fileBuffer: ArrayBuffer,
   fileName: string,
@@ -180,28 +158,12 @@ export function parseExcelFile(
    * las alternativas disponibles.
    */
   const resolveColumn = (possibleKeys: string[]): number => {
-    // 1) Coincidencia exacta
     for (const key of possibleKeys) {
       const normalized = normalizeHeader(key);
       const index = headerIndex.get(normalized);
 
       if (index !== undefined) {
         return index;
-      }
-    }
-
-    // 2) Coincidencia flexible para encabezados como
-    // "Nombre del vendedor", "Fecha de ejecución", "URL evidencia foto", etc.
-    const entries = Array.from(headerIndex.entries());
-
-    for (const key of possibleKeys) {
-      const normalizedKey = normalizeHeader(key);
-      if (normalizedKey.length < 4) continue;
-
-      for (const [header, index] of entries) {
-        if (header.includes(normalizedKey) || normalizedKey.includes(header)) {
-          return index;
-        }
       }
     }
 
@@ -213,103 +175,136 @@ export function parseExcelFile(
    */
   const columns = {
     id: resolveColumn([
-      'id', 'id_tarea', 'codigo_tarea', 'task_id', 'cod_registro',
-      'id registro', 'id de tarea', 'identificador tarea'
+      'ID Tarea',
+      'id_tarea',
+      'id',
+      'codigo_tarea',
+      'task_id',
     ]),
 
     fecha: resolveColumn([
-      'fecha', 'fecha_tarea', 'date', 'dia', 'fecha_visita',
-      'fecha de tarea', 'fecha ejecucion', 'fecha de ejecucion',
-      'fecha realizacion', 'fecha de realizacion'
+      'Fecha',
+      'fecha_tarea',
+      'date',
+      'dia',
+      'fecha_visita',
     ]),
 
     vendedor: resolveColumn([
-      'vendedor', 'preventista', 'ejecutivo', 'nombre_vendedor', 'promotor',
-      'nombre del vendedor', 'usuario vendedor', 'responsable', 'asesor comercial'
+      'Promotor',
+      'vendedor',
+      'preventista',
+      'ejecutivo',
+      'nombre_vendedor',
     ]),
 
     codigoVendedor: resolveColumn([
-      'codigo_vendedor', 'cod_vendedor', 'legajo', 'id_vendedor',
-      'codigo vendedor', 'cod vendedor', 'codigo preventista'
+      'bdrid',
+      'codigo_vendedor',
+      'cod_vendedor',
+      'legajo',
+      'id_vendedor',
     ]),
 
     supervisor: resolveColumn([
-      'supervisor', 'lider', 'jefe', 'nombre_supervisor',
-      'nombre del supervisor', 'supervisor vendedor'
+      'Supervisor ID',
+      'supervisor',
+      'lider',
+      'jefe',
+      'nombre_supervisor',
     ]),
 
-    ruta: resolveColumn([
-      'ruta', 'zona', 'territorio', 'circuito',
-      'ruta vendedor', 'ruta comercial'
+    region: resolveColumn([
+      'Region',
+      'region',
+    ]),
+
+    subregion: resolveColumn([
+      'Subregion',
+      'subregion',
     ]),
 
     codigoPDV: resolveColumn([
-      'codigo_pdv', 'cod_pdv', 'pdv_codigo', 'cliente_codigo', 'id_cliente',
-      'codigo pdv', 'codigo cliente', 'cod cliente', 'id pdv', 'codigo punto de venta'
-    ]),
-
-    nombrePDV: resolveColumn([
-      'nombre_pdv', 'pdv', 'cliente', 'razon_social', 'nombre_cliente', 'comercio',
-      'punto de venta', 'nombre punto de venta', 'nombre del cliente', 'nombre comercio'
-    ]),
-
-    direccionPDV: resolveColumn([
-      'direccion', 'domicilio', 'ubicacion', 'calle',
-      'direccion pdv', 'direccion cliente', 'direccion punto de venta'
+      'POC ID',
+      'codigo_pdv',
+      'cod_pdv',
+      'pdv_codigo',
+      'cliente_codigo',
+      'id_cliente',
     ]),
 
     categoriaTarea: resolveColumn([
-      'categoria', 'categoria_tarea', 'rubro', 'tipo_tarea', 'tipo',
-      'categoria tarea', 'tipo de tarea', 'grupo tarea'
+      'Pilar de la Liga',
+      'pilar',
+      'categoria',
+      'categoria_tarea',
+      'rubro',
+      'tipo_tarea',
+    ]),
+
+    variableTarea: resolveColumn([
+      'Variable de la Liga',
+      'variable',
+      'subcategoria',
     ]),
 
     nombreTarea: resolveColumn([
-      'tarea', 'nombre_tarea', 'mision', 'item', 'descripcion_tarea',
-      'nombre tarea', 'descripcion tarea', 'tarea comercial', 'actividad', 'ejecucion'
+      'Detalle Tarea',
+      'detalle_tarea',
+      'tarea',
+      'nombre_tarea',
+      'mision',
+      'descripcion_tarea',
     ]),
 
     completada: resolveColumn([
-      'completada', 'completado', 'tarea completada', 'estado completada',
-      'realizada', 'realizado', 'ejecutada', 'ejecutado', 'cumplida', 'cumplido'
+      'Completada',
+      'completado',
+      'completed',
+    ]),
+
+    validada: resolveColumn([
+      'Validada',
+      'validado',
+      'validada_directa',
+    ]),
+
+    justificacion: resolveColumn([
+      'Justificacion',
+      'Justificación',
+      'justificada',
+      'justificado',
     ]),
 
     invalidada: resolveColumn([
-      'invalidada', 'invalidado', 'tarea invalidada', 'es invalidada',
-      'rechazada', 'rechazado', 'valida', 'validada'
+      'Invalidada',
+      'invalidado',
     ]),
 
-    justificada: resolveColumn([
-      'justificada', 'justificado', 'tarea justificada', 'es justificada',
-      'con justificacion', 'justificacion'
+    visitaValida: resolveColumn([
+      'Visita Valida',
+      'Visita Válida',
+      'visita_valida',
     ]),
 
-    estado: resolveColumn([
-      'estado', 'estado_validacion', 'validacion', 'resultado', 'status',
-      'estado validacion', 'resultado validacion', 'estado auditoria'
+    fotoPrincipal: resolveColumn([
+      'TaskImageUrl',
+      'task_image_url',
+      'taskimageurl',
+      'url_foto_original',
+      'url_foto',
+      'foto',
+      'evidencia',
     ]),
 
-    motivoInvalidacion: resolveColumn([
-      'motivo', 'motivo_invalidacion', 'causa_rechazo', 'razon_invalidacion',
-      'invalidation_reason', 'motivo invalidacion', 'motivo rechazo'
-    ]),
-
-    detalleInvalidacion: resolveColumn([
-      'detalle', 'detalle_invalidacion', 'observacion', 'comentario_auditor',
-      'notas', 'detalle invalidacion', 'comentario auditor', 'observaciones'
-    ]),
-
-    foto: resolveColumn([
-      'foto', 'url_foto', 'url_foto_original', 'foto_original', 'evidencia',
-      'link_foto', 'imagen', 'fotografia', 'foto evidencia', 'evidencia fotografica',
-      'url imagen', 'url evidencia', 'link evidencia', 'imagen evidencia',
-      'foto tarea', 'foto de tarea'
-    ]),
-
-    puntajeBase: resolveColumn([
-      'puntaje_base', 'puntos_base', 'peso_tarea', 'puntos'
+    fotoAlternativa: resolveColumn([
+      'Img',
+      'imagen',
+      'image',
+      'foto_original',
+      'link_foto',
     ]),
   };
-
 
   const batchId = 'batch_' + Date.now();
   const importDate = new Date().toISOString();
@@ -409,7 +404,7 @@ export function parseExcelFile(
       const fecha = parseExcelDate(rawFechaVal);
 
       /*
-       * Datos principales
+       * Datos principales del archivo de ejecución OCD
        */
       const vendedor = getValByColumn(
         columns.vendedor,
@@ -422,117 +417,119 @@ export function parseExcelFile(
 
       const supervisor = getValByColumn(
         columns.supervisor,
-        'Supervisor General'
+        'Supervisor No Asignado'
       );
 
-      const ruta = getValByColumn(
-        columns.ruta,
-        'Ruta General'
-      );
+      const region = getValByColumn(columns.region);
+      const subregion = getValByColumn(columns.subregion);
+      const ruta = subregion || region || '';
 
       const codigoPDV = getValByColumn(
-        columns.codigoPDV,
-        `PDV-${1000 + index}`
+        columns.codigoPDV
       );
 
-      const nombrePDV = getValByColumn(
-        columns.nombrePDV,
-        'Punto de Venta'
-      );
+      const nombrePDV = codigoPDV
+        ? `PDV ${codigoPDV}`
+        : 'PDV sin código';
 
-      const direccionPDV = getValByColumn(
-        columns.direccionPDV
-      );
+      const direccionPDV = '';
 
       const categoriaTarea = getValByColumn(
         columns.categoriaTarea,
-        'Ejecución Comercial'
+        'Sin categoría'
       );
 
-      const nombreTarea = getValByColumn(
-        columns.nombreTarea,
-        `Tarea de Ejecución ${index + 1}`
+      const variableTarea = getValByColumn(
+        columns.variableTarea
       );
+
+      const detalleTarea = getValByColumn(
+        columns.nombreTarea
+      );
+
+      const nombreTarea =
+        detalleTarea || variableTarea || `Tarea ${index + 1}`;
 
       /*
-       * Estados operativos
+       * Indicadores reales del Excel.
+       * No usamos la fórmula de la columna Invalidada porque XLSX
+       * puede no recalcular fórmulas; la calculamos con los campos base.
        */
-      const rawEstado = getValByColumn(columns.estado).toUpperCase();
-      const completadaFlag = parseBooleanLike(getRawByColumn(columns.completada));
-      const invalidadaFlag = parseBooleanLike(getRawByColumn(columns.invalidada));
-      const justificadaFlag = parseBooleanLike(getRawByColumn(columns.justificada));
+      const toBoolean = (value: unknown): boolean => {
+        if (typeof value === 'boolean') return value;
+        if (typeof value === 'number') return value === 1;
 
-      let estadoValidacion: ValidationStatus = 'PENDIENTE_AUDITORIA';
+        const normalized = String(value ?? '')
+          .trim()
+          .toLowerCase();
 
-      if (
-        rawEstado.includes('INVAL') ||
-        rawEstado.includes('RECHAZ') ||
-        rawEstado.includes('FALL') ||
-        invalidadaFlag === true
-      ) {
-        estadoValidacion = 'INVALIDADA';
-      } else if (
-        rawEstado.includes('VALID') ||
-        rawEstado.includes('APROB') ||
-        rawEstado.includes('OK') ||
-        invalidadaFlag === false
-      ) {
+        return [
+          '1',
+          'true',
+          'si',
+          'sí',
+          'yes',
+          'x',
+        ].includes(normalized);
+      };
+
+      const completada = toBoolean(
+        getRawByColumn(columns.completada)
+      );
+
+      const validada = toBoolean(
+        getRawByColumn(columns.validada)
+      );
+
+      const justificada = toBoolean(
+        getRawByColumn(columns.justificacion)
+      );
+
+      const visitaValidaRaw =
+        getRawByColumn(columns.visitaValida);
+
+      const visitaValida =
+        visitaValidaRaw === undefined ||
+        visitaValidaRaw === null ||
+        visitaValidaRaw === ''
+          ? undefined
+          : toBoolean(visitaValidaRaw);
+
+      const invalidada =
+        completada && !validada && !justificada;
+
+      let estadoValidacion: ValidationStatus;
+
+      if (validada) {
         estadoValidacion = 'VALIDADA';
-      } else if (
-        rawEstado.includes('PEND') ||
-        rawEstado.includes('REV') ||
-        rawEstado.includes('AUDIT')
-      ) {
+      } else if (invalidada) {
+        estadoValidacion = 'INVALIDADA';
+      } else {
         estadoValidacion = 'PENDIENTE_AUDITORIA';
       }
 
-      const completada = completadaFlag ?? Boolean(rawEstado);
-      const justificada = justificadaFlag ?? false;
+      const motivoInvalidacion = invalidada
+        ? 'Tarea invalidada'
+        : '';
 
-      const motivoInvalidacion =
-        getValByColumn(columns.motivoInvalidacion) ||
-        (
-          estadoValidacion === 'INVALIDADA'
-            ? 'Incumplimiento de pauta'
-            : ''
-        );
-
-      const detalleInvalidacion =
-        getValByColumn(columns.detalleInvalidacion);
+      const detalleInvalidacion = '';
 
       /*
-       * Foto / evidencia
-       * Primero intentamos leer el hipervínculo real de la celda (cell.l.Target).
-       * Si no existe, usamos el contenido visible o una fórmula HYPERLINK().
+       * Evidencia fotográfica.
+       * En el archivo real la URL viene en TaskImageUrl y también en Img.
        */
-      let urlFotoOriginal = '';
-
-      if (columns.foto >= 0) {
-        const cellAddress = XLSX.utils.encode_cell({
-          r: index + 1, // +1 porque matrix[0] son encabezados
-          c: columns.foto,
-        });
-
-        const photoCell = worksheet[cellAddress] as XLSX.CellObject | undefined;
-        const hyperlinkTarget = photoCell?.l?.Target;
-
-        urlFotoOriginal = parseExcelUrl(
-          hyperlinkTarget || photoCell?.f || photoCell?.v || getRawByColumn(columns.foto)
+      const urlFotoOriginal =
+        parseExcelUrl(
+          getRawByColumn(columns.fotoPrincipal)
+        ) ||
+        parseExcelUrl(
+          getRawByColumn(columns.fotoAlternativa)
         );
-      }
 
-      /*
-       * Puntaje
-       */
-      const puntajeBase = getNumByColumn(
-        columns.puntajeBase,
-        20
-      );
-
-      const puntajeObtenido =
-        estadoValidacion === 'VALIDADA'
-          ? puntajeBase
-          : 0;
+      // Se mantienen por compatibilidad con TaskRecord/Supabase,
+      // pero ya no se muestran en la interfaz.
+      const puntajeBase = 20;
+      const puntajeObtenido = validada ? 20 : 0;
 
       /*
        * Clave compuesta para merge.
@@ -584,6 +581,8 @@ export function parseExcelFile(
           completada,
 
           justificada,
+
+          visitaValida,
 
           motivoInvalidacion:
             motivoInvalidacion ||
@@ -650,6 +649,8 @@ export function parseExcelFile(
           completada,
 
           justificada,
+
+          visitaValida,
 
           motivoInvalidacion,
 
@@ -729,6 +730,8 @@ export function exportTasksToExcel(tasks: TaskRecord[], fileName = 'Reporte_Vali
     'Motivo Invalidación': t.motivoInvalidacion || '',
     'Detalle Auditoría': t.detalleInvalidacion || '',
     'URL Foto Original': t.urlFotoOriginal || '',
+    'Puntaje Base': t.puntajeBase,
+    'Puntaje Final': t.puntajeObtenido,
     'Estado Apelación': t.estadoApelacion,
     'Fecha Apelación': t.fechaApelacion ? new Date(t.fechaApelacion).toLocaleString('es-AR') : '',
     'Motivo Apelación Vendedor': t.motivoApelacion || '',
