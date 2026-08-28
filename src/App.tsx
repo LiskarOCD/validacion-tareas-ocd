@@ -1,5 +1,11 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { TaskRecord, UserRole, FilterState, ImportBatch } from './types';
+import {
+  TaskRecord,
+  UserRole,
+  UserProfile,
+  FilterState,
+  ImportBatch
+} from './types';
 import { 
   loadStoredTasks, 
   loadStoredTasksAsync,
@@ -30,31 +36,88 @@ import { CheckCircle2, AlertCircle, Info } from 'lucide-react';
 export function App() {
   const [authLoading, setAuthLoading] = useState(true);
 const [isAuthenticated, setIsAuthenticated] = useState(false);
-
+const [profile, setProfile] = useState<UserProfile | null>(null);
+const [profileLoading, setProfileLoading] = useState(true);
 useEffect(() => {
   let mounted = true;
 
-  async function loadSession() {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
+  async function loadUserData() {
+    setAuthLoading(true);
+    setProfileLoading(true);
 
-    if (!mounted) return;
+    try {
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
 
-    setIsAuthenticated(Boolean(session));
-    setAuthLoading(false);
+      if (sessionError) {
+        throw sessionError;
+      }
+
+      if (!mounted) return;
+
+      if (!session?.user) {
+        setIsAuthenticated(false);
+        setProfile(null);
+        return;
+      }
+
+      setIsAuthenticated(true);
+
+      const { data: userProfile, error: profileError } =
+        await supabase
+          .from('profiles')
+          .select(
+            'id, email, nombre, role, vendedor, supervisor, activo'
+          )
+          .eq('id', session.user.id)
+          .single();
+
+      if (profileError) {
+        throw profileError;
+      }
+
+      if (!mounted) return;
+
+      setProfile(userProfile as UserProfile);
+    } catch (error) {
+      console.error(
+        'Error cargando sesión/perfil:',
+        error
+      );
+
+      if (mounted) {
+        setProfile(null);
+      }
+    } finally {
+      if (mounted) {
+        setAuthLoading(false);
+        setProfileLoading(false);
+      }
+    }
   }
 
-  loadSession();
+  loadUserData();
 
   const {
     data: { subscription },
-  } = supabase.auth.onAuthStateChange((_event, session) => {
-    if (!mounted) return;
+  } = supabase.auth.onAuthStateChange(
+    (_event, session) => {
+      if (!mounted) return;
 
-    setIsAuthenticated(Boolean(session));
-    setAuthLoading(false);
-  });
+      if (!session) {
+        setIsAuthenticated(false);
+        setProfile(null);
+        setAuthLoading(false);
+        setProfileLoading(false);
+        return;
+      }
+
+      setIsAuthenticated(true);
+      loadUserData();
+    }
+  );
 
   return () => {
     mounted = false;
