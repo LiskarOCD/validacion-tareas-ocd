@@ -148,11 +148,23 @@ useEffect(() => {
     };
   }, []);
 
-  const [userRole, setUserRole] = useState<UserRole>({
-    role: 'SUPERVISOR',
-    name: 'Supervisor General OCD',
-  });
+const [userRole, setUserRole] = useState<UserRole>({
+  role: 'ADMIN',
+  name: 'Administrador OCD',
+});
 
+useEffect(() => {
+  if (!profile) return;
+
+  setUserRole({
+    role: profile.role,
+    name: profile.nombre,
+    selectedVendedor:
+      profile.role === 'VENDEDOR'
+        ? profile.vendedor
+        : undefined,
+  });
+}, [profile]);
   const [filters, setFilters] = useState<FilterState>({
     searchTerm: '',
     vendedor: '',
