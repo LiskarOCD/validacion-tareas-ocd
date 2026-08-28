@@ -949,14 +949,7 @@ useEffect(() => {
       setUserRole({ role: 'SUPERVISOR', name: 'Supervisor General OCD' });
     }
 
-    showToast(
-      result.mode === 'replace'
-        ? `Base actualizada con éxito: ${result.tasks.length} tareas cargadas desde "${result.batch.fileName}".`
-        : `Lote fusionado: ${result.batch.insertedRows} nuevas, ${result.batch.updatedRows} actualizadas.`,
-      'success'
-    );
-  };
-
+   
   const handleSubmitAppeal = (
     taskId: string,
     motivoApelacion: string,
