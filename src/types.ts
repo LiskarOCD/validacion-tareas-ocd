@@ -95,10 +95,15 @@ export interface TaskRecord {
  * Es independiente del estado original de la tarea.
  */
 revisionVendedor?: 'VALIDA' | 'INVALIDA';
-
 revisionVendedorFecha?: string;
-
 revisionVendedorUserId?: string;
+
+  /*
+ * Dictamen final realizado por el supervisor.
+ */
+dictamenSupervisor?: 'VALIDA' | 'INVALIDA';
+dictamenSupervisorFecha?: string;
+dictamenSupervisorUserId?: string;
 
   /*
    * Auditoría.
