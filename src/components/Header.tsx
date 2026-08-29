@@ -11,8 +11,9 @@ import {
   Sparkles,
   Trash2,
   MoreVertical,
-  ChevronDown,
-  Database
+ChevronDown,
+Database,
+LogOut
 } from 'lucide-react';
 import { UserRole } from '../types';
 import { OcdLogo } from './OcdLogo';
@@ -29,6 +30,7 @@ interface HeaderProps {
   onClearData: () => void;
   pendingAppealsCount: number;
   totalTasksCount: number;
+  onLogout: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -43,6 +45,7 @@ export const Header: React.FC<HeaderProps> = ({
   onClearData,
   pendingAppealsCount,
   totalTasksCount,
+  onLogout,
 }) => {
   const [showDbMenu, setShowDbMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -159,7 +162,18 @@ export const Header: React.FC<HeaderProps> = ({
     </span>
   </div>
 </div>
+<button
+  type="button"
+  onClick={onLogout}
+  className="bg-[#06182E]/80 hover:bg-rose-950/60 text-slate-300 hover:text-white px-2.5 py-1.5 rounded-lg border border-[#2B98BA]/30 hover:border-rose-500/50 flex items-center gap-1.5 transition-all cursor-pointer"
+  title="Cerrar sesión"
+>
+  <LogOut className="w-3.5 h-3.5" />
 
+  <span className="hidden md:inline text-xs font-semibold">
+    Salir
+  </span>
+</button>
             {/* Import & Export Buttons */}
             <div className="flex items-center gap-1.5">
              {userRole.role === 'ADMIN' && (
