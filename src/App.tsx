@@ -1412,6 +1412,7 @@ const handleVendorReview = async (
     setResolutionModalTask(task)
   }
   onVendorReview={handleVendorReview}
+  onSupervisorReview={handleSupervisorReview}
   onOpenImageViewer={(task, mode) =>
     setImageViewerState({
       task,
