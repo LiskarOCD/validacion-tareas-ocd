@@ -125,8 +125,8 @@ export const TaskTable: React.FC<TaskTableProps> = ({
         </span>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="min-w-[1500px] w-full text-left text-xs text-slate-600">
+<div className="w-full max-w-full overflow-x-scroll pb-3">
+  <table className="min-w-[1500px] w-max text-left text-xs text-slate-600">
           <thead className="bg-[#F2FAFD] text-[#0B2F5B] uppercase font-black text-[11px] tracking-wider border-b border-[#D5E5ED]">
             <tr>
               <th className="py-3 px-3.5">Evidencia</th>
