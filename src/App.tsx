@@ -165,9 +165,51 @@ useEffect(() => {
         from += pageSize;
       }
 
-      if (!isMounted) return;
+     if (!isMounted) return;
 
-      const mappedTasks: TaskRecord[] = allRows.map((row) => ({
+/*
+ * Cargar las revisiones realizadas por vendedores.
+ */
+const reviewRows: any[] = [];
+let reviewFrom = 0;
+
+while (true) {
+  const { data: reviewsPage, error: reviewsError } =
+    await supabase
+      .from('task_vendor_reviews')
+      .select('task_id, user_id, decision, updated_at')
+      .order('updated_at', { ascending: false })
+      .range(reviewFrom, reviewFrom + pageSize - 1);
+
+  if (reviewsError) {
+    throw reviewsError;
+  }
+
+  if (!reviewsPage || reviewsPage.length === 0) {
+    break;
+  }
+
+  reviewRows.push(...reviewsPage);
+
+  if (reviewsPage.length < pageSize) {
+    break;
+  }
+
+  reviewFrom += pageSize;
+}
+
+const reviewMap = new Map<string, any>();
+
+reviewRows.forEach((review) => {
+  if (!reviewMap.has(review.task_id)) {
+    reviewMap.set(review.task_id, review);
+  }
+});
+
+const mappedTasks: TaskRecord[] = allRows.map((row) => {
+  const review = reviewMap.get(row.id);
+
+  return ({
         id: row.id,
 
         importBatchId: row.import_batch_id ?? undefined,
@@ -237,8 +279,22 @@ useEffect(() => {
             ? undefined
             : Number(row.puntaje_ajustado),
 
-        updatedAt: row.updated_at ?? undefined,
-      }));
+      revisionVendedor:
+  review?.decision === 'VALIDA' ||
+  review?.decision === 'INVALIDA'
+    ? review.decision
+    : undefined,
+
+revisionVendedorFecha:
+  review?.updated_at ?? undefined,
+
+revisionVendedorUserId:
+  review?.user_id ?? undefined,
+
+updatedAt:
+  row.updated_at ?? undefined,
+  });
+});
 
       setTasks(mappedTasks);
 
@@ -439,7 +495,126 @@ useEffect(() => {
     setUserRole({ role: 'SUPERVISOR', name: 'Supervisor General OCD' });
     showToast('Base de datos vaciada. Puedes cargar tu archivo Excel.', 'info');
   };
+const handleVendorReview = async (
+  taskId: string,
+  decision: 'VALIDA' | 'INVALIDA'
+) => {
+  try {
+    /*
+     * Solo un usuario con perfil VENDEDOR
+     * puede registrar esta decisión.
+     */
+    if (!profile || profile.role !== 'VENDEDOR') {
+      showToast(
+        'Solo un vendedor puede registrar esta revisión.',
+        'error'
+      );
+      return;
+    }
 
+    const task = tasks.find(
+      (item) => item.id === taskId
+    );
+
+    if (!task) {
+      showToast(
+        'No se encontró la tarea seleccionada.',
+        'error'
+      );
+      return;
+    }
+
+    /*
+     * Verificar que la tarea pertenezca realmente
+     * al vendedor autenticado.
+     */
+    if (
+      profile.vendedor &&
+      task.vendedor !== profile.vendedor
+    ) {
+      showToast(
+        'Esta tarea no corresponde al vendedor autenticado.',
+        'error'
+      );
+      return;
+    }
+
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError) {
+      throw userError;
+    }
+
+    if (!user) {
+      throw new Error(
+        'No hay un usuario autenticado.'
+      );
+    }
+
+    const now = new Date().toISOString();
+
+    /*
+     * Si ya existe revisión para esta tarea,
+     * la actualiza. Si no existe, la crea.
+     */
+    const { error } = await supabase
+      .from('task_vendor_reviews')
+      .upsert(
+        {
+          task_id: taskId,
+          user_id: user.id,
+          decision,
+          updated_at: now,
+        },
+        {
+          onConflict: 'task_id',
+        }
+      );
+
+    if (error) {
+      throw error;
+    }
+
+    /*
+     * Actualizar inmediatamente React.
+     * No hace falta recargar la página.
+     */
+    setTasks((prev) =>
+      prev.map((item) =>
+        item.id === taskId
+          ? {
+              ...item,
+              revisionVendedor: decision,
+              revisionVendedorFecha: now,
+              revisionVendedorUserId: user.id,
+            }
+          : item
+      )
+    );
+
+    showToast(
+      decision === 'VALIDA'
+        ? 'Revisión guardada como Válida.'
+        : 'Revisión guardada como No válida.',
+      'success'
+    );
+  } catch (error: any) {
+    console.error(
+      'Error guardando revisión del vendedor:',
+      error
+    );
+
+    showToast(
+      `No se pudo guardar la revisión: ${
+        error?.message || 'Error desconocido'
+      }`,
+      'error'
+    );
+  }
+};
   const handleImportSuccess = async (result: ParseResult) => {
   try {
     showToast(
@@ -1064,14 +1239,22 @@ useEffect(() => {
 
                 {/* Tasks Audit Table */}
                 <TaskTable
-                  tasks={filteredTasks}
-                  userRole={userRole}
-                  onOpenAppeal={(task) => setAppealModalTask(task)}
-                  onOpenResolution={(task) => setResolutionModalTask(task)}
-                  onOpenImageViewer={(task, mode) =>
-                    setImageViewerState({ task, initialMode: mode || 'original' })
-                  }
-                />
+  tasks={filteredTasks}
+  userRole={userRole}
+  onOpenAppeal={(task) =>
+    setAppealModalTask(task)
+  }
+  onOpenResolution={(task) =>
+    setResolutionModalTask(task)
+  }
+  onVendorReview={handleVendorReview}
+  onOpenImageViewer={(task, mode) =>
+    setImageViewerState({
+      task,
+      initialMode: mode || 'original',
+    })
+  }
+/>
               </div>
             )}
 
