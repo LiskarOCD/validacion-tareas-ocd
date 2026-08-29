@@ -41,14 +41,10 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   const [zoomLevel, setZoomLevel] = useState(1);
   const [rotation, setRotation] = useState(0);
 
-  const getProxiedImageUrl = (url?: string) => {
-    if (!url) return '';
-    if (url.startsWith('data:')) return url;
-    if (url.startsWith('http://') || url.startsWith('https://') || url.includes('drive.google.com') || url.includes('dropbox.com')) {
-      return `/api/image-proxy?url=${encodeURIComponent(url)}`;
-    }
-    return url;
-  };
+const getProxiedImageUrl = (url?: string) => {
+  if (!url) return '';
+  return url.trim();
+};
 
   const originalPhoto = task.urlFotoOriginal;
   const appealPhoto = task.evidenciaApelacionBase64 || task.evidenciaApelacionUrl;
