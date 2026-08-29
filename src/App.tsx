@@ -362,7 +362,13 @@ setTasks(tasksWithSupervisorReviews);
 console.log(
   `✅ ${tasksWithSupervisorReviews.length} tareas cargadas desde Supabase`
 );
-
+    } catch (error) {
+      console.error(
+        '❌ Error cargando tareas desde Supabase:',
+        error
+      );
+    }
+    }
   loadTasksFromSupabase();
 
   return () => {
