@@ -126,7 +126,7 @@ export const TaskTable: React.FC<TaskTableProps> = ({
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full text-left text-xs text-slate-600">
+        <table className="min-w-[1500px] w-full text-left text-xs text-slate-600">
           <thead className="bg-[#F2FAFD] text-[#0B2F5B] uppercase font-black text-[11px] tracking-wider border-b border-[#D5E5ED]">
             <tr>
               <th className="py-3 px-3.5">Evidencia</th>
@@ -249,14 +249,14 @@ export const TaskTable: React.FC<TaskTableProps> = ({
                       </span>
                     )}
                   </td>
-<td className="py-3 px-2 min-w-[230px] whitespace-nowrap">
+<td className="py-3 px-3 min-w-[190px] whitespace-nowrap">
   {userRole.role === 'VENDEDOR' ? (
     <div className="flex flex-col gap-1.5">
       <div className="text-[10px] uppercase tracking-wide font-bold text-slate-400">
         Tu revisión
       </div>
 
-    <div className="flex items-center gap-2 whitespace-nowrap">
+<div className="flex items-center gap-1.5 whitespace-nowrap">
         <button
           type="button"
           onClick={() => onVendorReview(task.id, 'VALIDA')}
