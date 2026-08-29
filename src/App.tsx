@@ -662,6 +662,122 @@ const handleVendorReview = async (
     );
   }
 };
+  const handleSupervisorReview = async (
+  taskId: string,
+  decision: 'VALIDA' | 'INVALIDA'
+) => {
+  try {
+    // Solo un SUPERVISOR puede emitir el dictamen final
+    if (!profile || profile.role !== 'SUPERVISOR') {
+      showToast(
+        'Solo un supervisor puede registrar el dictamen final.',
+        'error'
+      );
+      return;
+    }
+
+    const task = tasks.find(
+      (item) => item.id === taskId
+    );
+
+    if (!task) {
+      showToast(
+        'No se encontró la tarea seleccionada.',
+        'error'
+      );
+      return;
+    }
+
+    // El supervisor solo puede dictaminar tareas de su propio equipo
+    if (
+      profile.supervisor &&
+      String(task.supervisor) !== String(profile.supervisor)
+    ) {
+      showToast(
+        'Esta tarea no corresponde a tu equipo.',
+        'error'
+      );
+      return;
+    }
+
+    // Primero debe existir la revisión del vendedor
+    if (!task.revisionVendedor) {
+      showToast(
+        'El vendedor todavía no ha realizado su revisión.',
+        'error'
+      );
+      return;
+    }
+
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError) {
+      throw userError;
+    }
+
+    if (!user) {
+      throw new Error(
+        'No hay un usuario autenticado.'
+      );
+    }
+
+    const now = new Date().toISOString();
+
+    const { error } = await supabase
+      .from('task_supervisor_reviews')
+      .upsert(
+        {
+          task_id: taskId,
+          user_id: user.id,
+          decision,
+          updated_at: now,
+        },
+        {
+          onConflict: 'task_id',
+        }
+      );
+
+    if (error) {
+      throw error;
+    }
+
+    // Actualiza la pantalla inmediatamente
+    setTasks((prev) =>
+      prev.map((item) =>
+        item.id === taskId
+          ? {
+              ...item,
+              dictamenSupervisor: decision,
+              dictamenSupervisorFecha: now,
+              dictamenSupervisorUserId: user.id,
+            }
+          : item
+      )
+    );
+
+    showToast(
+      decision === 'VALIDA'
+        ? 'Dictamen final guardado como Válida.'
+        : 'Dictamen final guardado como No válida.',
+      'success'
+    );
+  } catch (error: any) {
+    console.error(
+      'Error guardando dictamen del supervisor:',
+      error
+    );
+
+    showToast(
+      `No se pudo guardar el dictamen: ${
+        error?.message || 'Error desconocido'
+      }`,
+      'error'
+    );
+  }
+};
   const handleImportSuccess = async (result: ParseResult) => {
   try {
     showToast(
