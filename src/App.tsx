@@ -474,6 +474,35 @@ useEffect(() => {
   }, [tasks]);
 
   // Handlers
+  const handleLogout = async () => {
+  try {
+    const { error } = await supabase.auth.signOut();
+
+    if (error) {
+      throw error;
+    }
+
+    setIsAuthenticated(false);
+    setProfile(null);
+
+    showToast(
+      'Sesión cerrada correctamente.',
+      'success'
+    );
+  } catch (error: any) {
+    console.error(
+      'Error cerrando sesión:',
+      error
+    );
+
+    showToast(
+      `No se pudo cerrar la sesión: ${
+        error?.message || 'Error desconocido'
+      }`,
+      'error'
+    );
+  }
+};
   const handleRoleChange = (newRole: UserRole) => {
     setUserRole(newRole);
     // Clear specific vendedor filter when switching role
@@ -1186,6 +1215,7 @@ const handleVendorReview = async (
         onClearData={handleClearData}
         pendingAppealsCount={pendingAppealsCount}
         totalTasksCount={tasks.length}
+        onLogout={handleLogout}
       />
 
       {/* Main Container */}
