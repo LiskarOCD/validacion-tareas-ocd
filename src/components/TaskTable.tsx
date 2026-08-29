@@ -18,10 +18,17 @@ interface TaskTableProps {
   userRole: UserRole;
   onOpenAppeal: (task: TaskRecord) => void;
   onOpenResolution: (task: TaskRecord) => void;
+
+  onVendorReview: (
+    taskId: string,
+    decision: 'VALIDA' | 'INVALIDA'
+  ) => void;
+
   onOpenImageViewer: (
     task: TaskRecord,
     initialType?: 'original' | 'apelacion' | 'compare'
   ) => void;
+}
 }
 
 const PAGE_SIZE = 50;
@@ -30,6 +37,7 @@ export const TaskTable: React.FC<TaskTableProps> = ({
   tasks,
   userRole,
   onOpenAppeal,
+  onVendorReview,
   onOpenImageViewer,
 }) => {
   const [currentPage, setCurrentPage] = useState(1);
@@ -123,10 +131,11 @@ export const TaskTable: React.FC<TaskTableProps> = ({
               <th className="py-3 px-3">Punto de Venta</th>
               <th className="py-3 px-3">Vendedor / Ruta</th>
               <th className="py-3 px-3">Tarea</th>
-              <th className="py-3 px-3">Completada</th>
-              <th className="py-3 px-3">Validación</th>
-              <th className="py-3 px-3">Justificación</th>
-              <th className="py-3 px-3.5 text-right">Acciones</th>
+           <th className="py-3 px-3">Completada</th>
+<th className="py-3 px-3">Estado original</th>
+<th className="py-3 px-3">Revisión vendedor</th>
+<th className="py-3 px-3">Justificación</th>
+<th className="py-3 px-3.5 text-right">Acciones</th>
             </tr>
           </thead>
 
@@ -236,7 +245,57 @@ export const TaskTable: React.FC<TaskTableProps> = ({
                       </span>
                     )}
                   </td>
+<td className="py-3 px-3 min-w-[190px]">
+  {userRole.role === 'VENDEDOR' ? (
+    <div className="flex flex-col gap-1.5">
+      <div className="text-[10px] uppercase tracking-wide font-bold text-slate-400">
+        Tu revisión
+      </div>
 
+      <div className="flex items-center gap-1.5">
+        <button
+          type="button"
+          onClick={() => onVendorReview(task.id, 'VALIDA')}
+          className={
+            task.revisionVendedor === 'VALIDA'
+              ? 'inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-emerald-600 text-white border border-emerald-600 shadow-sm cursor-pointer'
+              : 'inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-white text-emerald-700 border border-emerald-300 hover:bg-emerald-50 cursor-pointer'
+          }
+        >
+          <CheckCircle2 className="w-3.5 h-3.5" />
+          Válida
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onVendorReview(task.id, 'INVALIDA')}
+          className={
+            task.revisionVendedor === 'INVALIDA'
+              ? 'inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-rose-600 text-white border border-rose-600 shadow-sm cursor-pointer'
+              : 'inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-white text-rose-700 border border-rose-300 hover:bg-rose-50 cursor-pointer'
+          }
+        >
+          <XCircle className="w-3.5 h-3.5" />
+          No válida
+        </button>
+      </div>
+    </div>
+  ) : task.revisionVendedor === 'VALIDA' ? (
+    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-900 border border-emerald-300">
+      <CheckCircle2 className="w-3.5 h-3.5" />
+      Válida
+    </span>
+  ) : task.revisionVendedor === 'INVALIDA' ? (
+    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-900 border border-rose-300">
+      <XCircle className="w-3.5 h-3.5" />
+      No válida
+    </span>
+  ) : (
+    <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-100 text-slate-500 border border-slate-300">
+      Sin revisar
+    </span>
+  )}
+</td>
                   <td className="py-3 px-3">
                     {task.justificada ? (
                       <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300">
