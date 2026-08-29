@@ -296,18 +296,72 @@ updatedAt:
   });
 });
 
-      setTasks(mappedTasks);
+    // Cargar dictámenes finales de supervisores
+const supervisorReviewRows: any[] = [];
+let supervisorReviewFrom = 0;
+const supervisorReviewPageSize = 1000;
 
-      console.log(
-        `✅ ${mappedTasks.length} tareas cargadas desde Supabase`
+while (true) {
+  const { data: reviewData, error: reviewError } =
+    await supabase
+      .from('task_supervisor_reviews')
+      .select('task_id, user_id, decision, updated_at')
+      .range(
+        supervisorReviewFrom,
+        supervisorReviewFrom + supervisorReviewPageSize - 1
       );
-    } catch (error) {
-      console.error(
-        '❌ Error cargando tareas desde Supabase:',
-        error
-      );
-    }
+
+  if (reviewError) {
+    throw reviewError;
   }
+
+  if (!reviewData || reviewData.length === 0) {
+    break;
+  }
+
+  supervisorReviewRows.push(...reviewData);
+
+  if (reviewData.length < supervisorReviewPageSize) {
+    break;
+  }
+
+  supervisorReviewFrom += supervisorReviewPageSize;
+}
+
+// Relacionar cada dictamen con su tarea
+const supervisorReviewByTask = new Map(
+  supervisorReviewRows.map((review) => [
+    review.task_id,
+    review,
+  ])
+);
+
+const tasksWithSupervisorReviews = mappedTasks.map(
+  (task) => {
+    const review =
+      supervisorReviewByTask.get(task.id);
+
+    if (!review) {
+      return task;
+    }
+
+    return {
+      ...task,
+      dictamenSupervisor:
+        review.decision as 'VALIDA' | 'INVALIDA',
+      dictamenSupervisorFecha:
+        review.updated_at ?? undefined,
+      dictamenSupervisorUserId:
+        review.user_id ?? undefined,
+    };
+  }
+);
+
+setTasks(tasksWithSupervisorReviews);
+
+console.log(
+  `✅ ${tasksWithSupervisorReviews.length} tareas cargadas desde Supabase`
+);
 
   loadTasksFromSupabase();
 
