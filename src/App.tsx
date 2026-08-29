@@ -388,12 +388,30 @@ useEffect(() => {
   }, [tasks]);
 
   // Contextual tasks for the active role (if Vendedor role is active, filter to that vendedor)
-  const roleScopedTasks = useMemo(() => {
-    if (userRole.role === 'VENDEDOR' && userRole.selectedVendedor) {
-      return tasks.filter((t) => t.vendedor === userRole.selectedVendedor);
-    }
-    return tasks;
-  }, [tasks, userRole]);
+const roleScopedTasks = useMemo(() => {
+  // VENDEDOR: solo ve sus propias tareas
+  if (
+    userRole.role === 'VENDEDOR' &&
+    profile?.vendedor
+  ) {
+    return tasks.filter(
+      (t) => t.vendedor === profile.vendedor
+    );
+  }
+
+  // SUPERVISOR: solo ve las tareas de su equipo
+  if (
+    userRole.role === 'SUPERVISOR' &&
+    profile?.supervisor
+  ) {
+    return tasks.filter(
+      (t) => String(t.supervisor) === String(profile.supervisor)
+    );
+  }
+
+  // ADMIN: ve todas las tareas
+  return tasks;
+}, [tasks, userRole, profile]);
 
   // Filtered tasks calculation
   const filteredTasks = useMemo(() => {
