@@ -29,7 +29,6 @@ interface TaskTableProps {
     initialType?: 'original' | 'apelacion' | 'compare'
   ) => void;
 }
-}
 
 const PAGE_SIZE = 50;
 
