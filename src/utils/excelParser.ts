@@ -452,8 +452,9 @@ export function parseExcelFile(
 
       /*
        * Indicadores reales del Excel.
-       * No usamos la fórmula de la columna Invalidada porque XLSX
-       * puede no recalcular fórmulas; la calculamos con los campos base.
+       * Cada columna es independiente: 1 = sí, 0 = no.
+       * Completada, Validada, Justificacion e Invalidada se leen
+       * directamente del archivo, sin inferir una a partir de otra.
        */
       const toBoolean = (value: unknown): boolean => {
         if (typeof value === 'boolean') return value;
@@ -495,15 +496,20 @@ export function parseExcelFile(
           ? undefined
           : toBoolean(visitaValidaRaw);
 
-      const invalidada =
-        completada && !validada && !justificada;
+      const invalidada = toBoolean(
+        getRawByColumn(columns.invalidada)
+      );
 
       let estadoValidacion: ValidationStatus;
 
-      if (validada) {
-        estadoValidacion = 'VALIDADA';
-      } else if (invalidada) {
+      // Para el campo único estado_validacion de Supabase:
+      // Invalidada tiene prioridad si la columna Invalidada = 1.
+      // Si no está invalidada y Validada = 1, queda VALIDADA.
+      // En cualquier otro caso queda pendiente.
+      if (invalidada) {
         estadoValidacion = 'INVALIDADA';
+      } else if (validada) {
+        estadoValidacion = 'VALIDADA';
       } else {
         estadoValidacion = 'PENDIENTE_AUDITORIA';
       }
