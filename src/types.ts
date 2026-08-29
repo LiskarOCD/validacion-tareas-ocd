@@ -90,6 +90,15 @@ export interface TaskRecord {
   comentarioResolucion?: string;
 
   puntajeAjustado?: number;
+  /*
+ * Revisión realizada por el vendedor.
+ * Es independiente del estado original de la tarea.
+ */
+revisionVendedor?: 'VALIDA' | 'INVALIDA';
+
+revisionVendedorFecha?: string;
+
+revisionVendedorUserId?: string;
 
   /*
    * Auditoría.
